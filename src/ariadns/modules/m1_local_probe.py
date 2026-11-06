@@ -23,6 +23,15 @@ VERIFICATION_PATTERNS = {
 
 def parse_soa_rname(rname: str) -> str:
     r"""Convert SOA RNAME (e.g., admin.example.com. or first\.last.example.com.) to email."""
+    cleaned = rname.strip().rstrip(".")
+    sentinel = "___ESCAPED_DOT___"
+    masked = cleaned.replace(r"\.", sentinel)
+    if "." in masked:
+        parts = masked.split(".", 1)
+        local_part = parts[0].replace(sentinel, ".")
+        domain_part = parts[1].replace(sentinel, ".")
+        return f"{local_part}@{domain_part}"
+    return masked.replace(sentinel, ".")
 
 def grab_http_banner(domain: str, ip: str | None = None, timeout: float = 5.0) -> dict[str, Any]:
     """Send standard HEAD / HTTP/1.1 request carrying Host header and extract Server, X-Powered-By, Set-Cookie."""
