@@ -1,0 +1,46 @@
+api_keys:
+  virustotal: ""
+  alienvault_otx: ""
+  viewdns: ""
+  hackertarget: ""
+  securitytrails: ""
+  whoisxml: ""
+  publicwww: ""
+
+rate_limits:
+  virustotal_rpm: 4
+  virustotal_rpd: 500
+  default_delay_seconds: 1.5
+  http_timeout_seconds: 5.0
+  max_retries: 3
+
+blacklists:
+  mx:
+    - "google.com"
+    - "googlemail.com"
+    - "outlook.com"
+    - "protection.outlook.com"
+    - "pphosted.com"
+    - "mimecast.com"
+    - "zoho.com"
+    - "yahoodns.net"
+    - "icloud.com"
+    - "protonmail.ch"
+    - "secureserver.net"
+  ns:
+    - "cloudflare.com"
+    - "domaincontrol.com"
+    - "awsdns"
+    - "googledomains.com"
+    - "azure-dns"
+    - "nsone.net"
+    - "linode.com"
+    - "digitalocean.com"
+    - "registrar-servers.com"
+    - "hichina.com"
+    - "dnspod.net"
+  shared_ip_threshold: 100
+
+cache:
+  ttl_seconds: 604800
+  db_path: "ariadns_state.db"
