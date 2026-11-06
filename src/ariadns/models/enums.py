@@ -1,0 +1,47 @@
+from enum import Enum
+
+class OriginVerificationStatus(str, Enum):
+    CONFIRMED = "CONFIRMED"
+    SUSPECTED = "SUSPECTED"
+    UNVERIFIED = "UNVERIFIED"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+
+class ConfidenceLevel(str, Enum):
+    HIGH = "HIGH"
+    MEDIUM = "MEDIUM"
+    LOW = "LOW"
+    NOISE_FILTERED = "NOISE_FILTERED"
+
+class ModuleStatus(str, Enum):
+    OK = "OK"
+    CACHED = "CACHED"
+    FALLBACK_NATIVE = "FALLBACK_NATIVE"
+    SKIPPED_BLACKLIST = "SKIPPED_BLACKLIST"
+    SKIPPED_QUOTA = "SKIPPED_QUOTA"
+    SKIPPED_NO_KEY = "SKIPPED_NO_KEY"
+    TIMEOUT_UNVERIFIED = "TIMEOUT_UNVERIFIED"
+
+class NodeType(str, Enum):
+    DOMAIN_L1 = "DOMAIN_L1"
+    DOMAIN_L2 = "DOMAIN_L2"
+    SUBDOMAIN = "SUBDOMAIN"
+    IP = "IP"
+    ASN = "ASN"
+    MX = "MX"
+    NS = "NS"
+    EMAIL = "EMAIL"
+    TOKEN = "TOKEN"
+    CERT_SAN = "CERT_SAN"
+
+class EdgeType(str, Enum):
+    RESOLVES_TO = "RESOLVES_TO"
+    HISTORICAL_A = "HISTORICAL_A"
+    USES_MX = "USES_MX"
+    USES_NS = "USES_NS"
+    HAS_SUBDOMAIN = "HAS_SUBDOMAIN"
+    REGISTERED_BY = "REGISTERED_BY"
+    HAS_TOKEN = "HAS_TOKEN"
+    SAME_ORIGIN_IP = "SAME_ORIGIN_IP"
+    SAME_MX = "SAME_MX"
+    SAME_NS = "SAME_NS"
+    SAME_TOKEN = "SAME_TOKEN"
