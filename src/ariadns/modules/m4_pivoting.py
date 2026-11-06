@@ -51,7 +51,7 @@ class PivotingEngine:
         if resp and resp.status_code == 200:
             for line in resp.text.splitlines():
                 cleaned = line.strip().lower()
-                if cleaned and "no records" not in cleaned:
+                if cleaned and "no records" not in cleaned and "error" not in cleaned:
                     domains.append(cleaned)
 
         self.db.set_pivot_cache("hackertarget", "reverse_mx", mx_host, domains, ttl_seconds=self.config.cache_ttl_seconds)
@@ -70,7 +70,7 @@ class PivotingEngine:
         if resp and resp.status_code == 200:
             for line in resp.text.splitlines():
                 cleaned = line.strip().lower()
-                if cleaned and "no records" not in cleaned:
+                if cleaned and "no records" not in cleaned and "error" not in cleaned:
                     domains.append(cleaned)
 
         self.db.set_pivot_cache("hackertarget", "reverse_ns", ns_host, domains, ttl_seconds=self.config.cache_ttl_seconds)
