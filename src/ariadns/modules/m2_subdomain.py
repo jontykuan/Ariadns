@@ -1,4 +1,4 @@
-"""Module 2: Subdomain Enumerator (crt.sh, subfinder wrapper, httpx wrapper & native prober)."""
+"""Module 2: Subdomain Enumerator (crt.sh, HackerTarget, subfinder wrapper, httpx wrapper & native prober)."""
 
 import json
 from typing import Any
@@ -40,7 +40,29 @@ class SubdomainEnumerator:
                 pass
 
         sub_list = sorted(list(subdomains))
-        self.db.set_dns_cache(domain, "CRT_SH", {"subdomains": sub_list}, ttl_seconds=self.config.cache_ttl_seconds)
+        if sub_list:
+            self.db.set_dns_cache(domain, "CRT_SH", {"subdomains": sub_list}, ttl_seconds=self.config.cache_ttl_seconds)
+        return sub_list
+
+    def query_hackertarget_subdomains(self, domain: str) -> list[str]:
+        cached = self.db.get_dns_cache(domain, "HT_HOSTSEARCH")
+        if cached is not None:
+            return cached.get("subdomains", [])
+
+        url = f"https://api.hackertarget.com/hostsearch/?q={domain}"
+        resp, status = self.http_client.fetch_with_backoff(url, provider="hackertarget")
+        subdomains: set[str] = set()
+
+        if resp and resp.status_code == 200:
+            for line in resp.text.splitlines():
+                if "," in line:
+                    host = line.split(",")[0].strip().lower()
+                    if host.endswith(f".{domain.lower()}") or host == domain.lower():
+                        subdomains.add(host)
+
+        sub_list = sorted(list(subdomains))
+        if sub_list:
+            self.db.set_dns_cache(domain, "HT_HOSTSEARCH", {"subdomains": sub_list}, ttl_seconds=self.config.cache_ttl_seconds)
         return sub_list
 
     def enumerate_subfinder(self, domain: str) -> list[str]:
@@ -54,15 +76,6 @@ class SubdomainEnumerator:
 
     def probe_subdomains_httpx(self, subdomains: list[str]) -> list[SubdomainRecord]:
         records: list[SubdomainRecord] = []
-        if check_binary_available("httpx") and subdomains:
-            # Run httpx pipeline
-            cmd = ["httpx", "-silent", "-status-code", "-title", "-ip", "-web-server"]
-            # Subprocess execution
-            # Fall back to native probe if pipeline execution is not simple
-            # Native probe provides uniform cross-platform behavior
-            pass
-
-        # Native resilient prober
         resolver = dns.resolver.Resolver()
         resolver.timeout = 2.0
         resolver.lifetime = 2.0
@@ -86,7 +99,6 @@ class SubdomainEnumerator:
                         resp = client.get(f"{proto}://{sub}/")
                         status_code = resp.status_code
                         server = resp.headers.get("server")
-                        # Extract title
                         body = resp.text
                         if "<title>" in body and "</title>" in body:
                             title = body.split("<title>")[1].split("</title>")[0].strip()
@@ -110,10 +122,10 @@ class SubdomainEnumerator:
             return [SubdomainRecord(**r) for r in cached.get("records", [])]
 
         crt_subs = self.query_crt_sh(domain)
+        ht_subs = self.query_hackertarget_subdomains(domain)
         subfinder_subs = self.enumerate_subfinder(domain)
-        all_subs = sorted(list(set(crt_subs + subfinder_subs)))
-        
-        # Limit prober to avoid long delays during large enumeration
+        all_subs = sorted(list(set(crt_subs + ht_subs + subfinder_subs)))
+
         active_records = self.probe_subdomains_httpx(all_subs[:30])
         self.db.set_dns_cache(
             domain,
