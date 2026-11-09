@@ -130,10 +130,12 @@ class Orchestrator:
         # 3. Module 3: Origin Detection
         target_pivot_ip = infra.current_ip
         if infra.is_cdn:
-            origin_ip, status = self.m3.detect_origin(domain, dns_records.get("A", []))
+            first_ip = dns_records.get("A", [None])[0] if dns_records.get("A") else None
+            origin_ip, status = self.m3.detect_origin(domain, first_ip)
+            status_val = status.value if hasattr(status, "value") else str(status)
             if origin_ip:
                 infra.suspected_origin_ip = origin_ip
-                infra.origin_verification_status = status.value
+                infra.origin_verification_status = status_val
                 target_pivot_ip = origin_ip
                 orig_id = graph_store.add_node(NodeType.IP.value, origin_ip)
                 graph_store.add_edge(l1_node_id, orig_id, EdgeType.HISTORICAL_A.value)
@@ -141,7 +143,7 @@ class Orchestrator:
                 evidence_dag.add_proposition(
                     "F_ORIGIN",
                     PropositionKind.FACT.value,
-                    f"Historical/Subdomain analysis found candidate origin IP {origin_ip} for {domain} (Status: {status.value})",
+                    f"Historical/Subdomain analysis found candidate origin IP {origin_ip} for {domain} (Status: {status_val})",
                     target_entity=origin_ip,
                     entity_type="IP"
                 )
