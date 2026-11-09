@@ -60,7 +60,7 @@ flowchart TD
 
 ### 2. 套件安裝
 ```bash
-git clone https://github.com/your-username/Ariadns.git
+git clone https://github.com/jontykuan/Ariadns.git
 cd Ariadns
 
 # 建立並啟動虛擬環境 (建議)
@@ -276,7 +276,7 @@ Ariadns adheres to Semantic Versioning (`vX.Y.Z`):
 
 ### Setup
 ```bash
-git clone https://github.com/your-username/Ariadns.git
+git clone https://github.com/jontykuan/Ariadns.git
 cd Ariadns
 
 python -m venv .venv
@@ -432,3 +432,8 @@ Add the following to your agent's MCP configuration file (e.g., `claude_desktop_
 
 ## 6. License
 MIT License.
+
+---
+
+## 致謝 (Acknowledgments)
+*Developed with the assistance of Google Antigravity.*
