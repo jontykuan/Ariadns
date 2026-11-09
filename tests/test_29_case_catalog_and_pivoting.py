@@ -133,3 +133,64 @@ def test_web_ui_sessions_and_status_targets(tmp_path, monkeypatch):
     finally:
         server.shutdown()
         server.server_close()
+
+def test_multi_target_dag_linking_and_recommender(tmp_path, monkeypatch):
+    from ariadns.modules.m5_orchestrator import Orchestrator
+    from ariadns.modules.m8_recommender import NextStepRecommender
+    from ariadns.models.entities import Infrastructure, IdentityProfile
+
+    db_file = tmp_path / "pivot_test.db"
+    db = DatabaseManager(str(db_file))
+    cfg = AppConfig(db_path=str(db_file))
+    orch = Orchestrator(config=cfg, db=db)
+
+    # Mock M1 probe
+    def mock_resolve(target):
+        return {"A": ["1.2.3.4"], "NS": ["ns1.host.com"], "MX": []}
+    def mock_identity(target, records):
+        return IdentityProfile(registrar_name="TargetRegistrar")
+    def mock_infra(target, ips, run_portscan=False):
+        return Infrastructure(current_ip="1.2.3.4", is_cdn=False)
+
+    monkeypatch.setattr(orch.m1, "resolve_records", mock_resolve)
+    monkeypatch.setattr(orch.m1, "get_identity_profile", mock_identity)
+    monkeypatch.setattr(orch.m1, "probe_infrastructure", mock_infra)
+
+    # 1. Run M1 on primary target "root.com"
+    entry1 = orch.run_step("root.com", "m1", "root.com")
+    root_props = db.get_normalized_propositions("root.com", rendered_only=False)
+    root_prop_ids = {p.prop_id for p in root_props}
+    assert "F1" in root_prop_ids
+    assert "C1" in root_prop_ids
+
+    # 2. Add pivot discovery fact F_PIVOT_1 pointing to "correlated.com"
+    f_pivot = PropositionNode(
+        prop_id="F_PIVOT_1",
+        node_kind="FACT",
+        rank=0,
+        statement="Pivoting on 1.2.3.4 discovered correlated domain correlated.com",
+        target_entity="correlated.com",
+        entity_type="DOMAIN_L2"
+    )
+    db.save_normalized_evidence("root.com", [f_pivot], [])
+
+    # Recommender should suggest M1 on correlated.com
+    recommender = NextStepRecommender(db, cfg)
+    recs = recommender.recommend("root.com")
+    assert any(r.recommended_module == "m1" and r.recommended_target == "correlated.com" for r in recs)
+
+    # 3. Run M1 on secondary target "correlated.com" under the SAME session "root.com"
+    entry2 = orch.run_step("root.com", "m1", "correlated.com")
+
+    # 4. Verify root propositions are NOT overwritten
+    all_props = db.get_normalized_propositions("root.com", rendered_only=False)
+    all_prop_ids = {p.prop_id for p in all_props}
+    assert "F1" in all_prop_ids
+    assert "C1" in all_prop_ids
+    # Secondary propositions are namespaced
+    assert "correlated_com_F1" in all_prop_ids
+    assert "correlated_com_C1" in all_prop_ids
+
+    # 5. Verify causal edge from F_PIVOT_1 to correlated_com_C1
+    edges = db.get_normalized_edges("root.com")
+    assert ("F_PIVOT_1", "correlated_com_C1") in edges

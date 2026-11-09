@@ -89,20 +89,23 @@ class NextStepRecommender:
                             ))
                             rec_counter += 1
 
-        # Rule 4: High Confidence L2 Expansion
+        # Rule 4: High Confidence L2 Expansion or Pivot Target Expansion
         for p in propositions:
-            if p.node_kind == "CONCLUSION" and "Confidence: HIGH" in p.statement and p.entity_type == "DOMAIN_L2":
+            is_l2_candidate = (p.entity_type == "DOMAIN_L2" and p.target_entity) or (p.prop_id.startswith("F_PIVOT_") and p.target_entity)
+            if is_l2_candidate:
                 l2_domain = p.target_entity.lower()
-                if ("m1", l2_domain) not in executed:
-                    recommendations.append(NextStepRecommendation(
-                        rec_id=f"REC_{rec_counter}",
-                        trigger_fact_ids=p.premises,
-                        recommended_module="m1",
-                        recommended_target=l2_domain,
-                        rationale=f"High-confidence correlated domain {l2_domain} identified; probe DNS and registrar identity.",
-                        expected_evidence="Registrant KYC, nameserver host, and operator identity links.",
-                        cli_command=f"ariadns step -d {session_id} -m m1 --target {l2_domain}"
-                    ))
-                    rec_counter += 1
+                if l2_domain != session_id and ("m1", l2_domain) not in executed:
+                    # Avoid duplicate recommendation for same l2_domain
+                    if not any(r.recommended_target == l2_domain and r.recommended_module == "m1" for r in recommendations):
+                        recommendations.append(NextStepRecommendation(
+                            rec_id=f"REC_{rec_counter}",
+                            trigger_fact_ids=[p.prop_id] if p.prop_id else p.premises,
+                            recommended_module="m1",
+                            recommended_target=l2_domain,
+                            rationale=f"Correlated pivot domain {l2_domain} identified; probe DNS, infrastructure, and registrar identity.",
+                            expected_evidence="Registrant KYC, nameserver host, and operator identity links.",
+                            cli_command=f"ariadns step -d {session_id} -m m1 --target {l2_domain}"
+                        ))
+                        rec_counter += 1
 
         return recommendations

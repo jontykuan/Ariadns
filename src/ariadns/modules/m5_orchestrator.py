@@ -281,21 +281,28 @@ class Orchestrator:
             identity = self.m1.get_identity_profile(target, dns_records)
             infra = self.m1.probe_infrastructure(target, dns_records.get("A", []), run_portscan=params.get("run_portscan", False))
 
+            is_secondary = (target != session_id)
+            target_slug = target.replace(".", "_").replace(":", "_").replace("-", "_")
+            prefix = f"{target_slug}_" if is_secondary else ""
+            f1_id = f"{prefix}F1"
+            f2_id = f"{prefix}F2"
+            c1_id = f"{prefix}C1"
+
             f1 = PropositionNode(
-                prop_id="F1",
+                prop_id=f1_id,
                 node_kind=PropositionKind.FACT.value,
                 rank=0,
                 statement=f"Domain {target} resolves to A:{dns_records.get('A', [])}, CDN:{infra.is_cdn} ({infra.cdn_provider or 'None'}), Server:{infra.server_banner or 'Unknown'}",
                 target_entity=target,
-                entity_type="DOMAIN_L1"
+                entity_type="DOMAIN_L2" if is_secondary else "DOMAIN_L1"
             )
             f2 = PropositionNode(
-                prop_id="F2",
+                prop_id=f2_id,
                 node_kind=PropositionKind.FACT.value,
                 rank=0,
                 statement=f"Domain {target} registered via '{identity.registrar_name or 'Unknown'}', SOA Admin '{identity.soa_admin_email or 'N/A'}', Tokens: {list(identity.verification_tokens.keys())}",
                 target_entity=target,
-                entity_type="DOMAIN_L1"
+                entity_type="DOMAIN_L2" if is_secondary else "DOMAIN_L1"
             )
             l1_custodians = map_custodians_for_node("DOMAIN_L1", target, {
                 "registrar_name": identity.registrar_name,
@@ -303,20 +310,27 @@ class Orchestrator:
                 "cdn_provider": infra.cdn_provider,
                 "current_ip": infra.current_ip,
             })
+            c1_premises = [f1_id, f2_id]
+            # Link to pivot origin if target was discovered via pivoting/unproxied IP
+            for p in existing_props:
+                if p.target_entity == target and p.prop_id not in c1_premises:
+                    c1_premises.append(p.prop_id)
+                    new_edges.append((p.prop_id, c1_id))
+
             c1 = PropositionNode(
-                prop_id="C1",
+                prop_id=c1_id,
                 node_kind=PropositionKind.CONCLUSION.value,
                 rank=1,
                 statement=f"Active infrastructure and registration authority identified for {target}",
-                premises=["F1", "F2"],
+                premises=c1_premises,
                 rule_name="RULE_DIRECT_OBSERVATION",
                 target_entity=target,
-                entity_type="DOMAIN_L1",
+                entity_type="DOMAIN_L2" if is_secondary else "DOMAIN_L1",
                 custodians=l1_custodians
             )
             new_props.extend([f1, f2, c1])
-            new_edges.extend([("F1", "C1"), ("F2", "C1")])
-            added_fact_ids.extend(["F1", "F2"])
+            new_edges.extend([(f1_id, c1_id), (f2_id, c1_id)])
+            added_fact_ids.extend([f1_id, f2_id])
 
         elif module_name == "m2":
             subdomains = self.m2.run(target)
