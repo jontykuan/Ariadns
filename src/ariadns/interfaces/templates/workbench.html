@@ -91,6 +91,22 @@
       border-color: var(--border-accent);
     }
 
+    .case-nav-select {
+      background: var(--bg-surface2);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      max-width: 170px;
+      cursor: pointer;
+    }
+    .case-nav-select:focus {
+      outline: 2px solid var(--border-accent);
+      border-color: var(--border-accent);
+    }
+
     .status-indicators {
       display: flex;
       align-items: center;
@@ -602,9 +618,17 @@
     <div class="brand-section">
       <span class="brand-title" id="txtBrandTitle">ARIADNS 網域公開情資分析平台</span>
       <form class="session-form" id="sessionForm" onsubmit="event.preventDefault(); loadSession();">
+        <label for="caseSelect" style="display:none;">歷史案件</label>
+        <select id="caseSelect" class="case-nav-select" onchange="onCaseSelectChange()" title="切換歷史案件">
+          <option value="">(歷史案件)</option>
+        </select>
         <label for="domainInput" style="display:none;">目標網域</label>
         <input type="text" id="domainInput" class="session-input" placeholder="輸入目標網域，如 example.com" value="" required>
         <button type="submit" class="btn" id="btnLoadSession">載入案件</button>
+        <label for="targetScopeSelect" style="display:none;">標的範圍</label>
+        <select id="targetScopeSelect" class="case-nav-select" onchange="onTargetScopeChange()" title="篩選標的範圍">
+          <option value="ALL">全案檢視 (All)</option>
+        </select>
       </form>
     </div>
 
@@ -890,6 +914,8 @@
   <script>
     const TRANSLATIONS = {
       zh: {
+        caseSelectPrompt: "(歷史案件)",
+        targetScopeAll: "全案檢視 (全部標的)",
         brandTitle: "ARIADNS 網域公開情資分析平台",
         domainPlaceholder: "輸入目標網域，如 example.com",
         loadSession: "載入案件",
@@ -1008,6 +1034,8 @@
         noneTarget: "無"
       },
       en: {
+        caseSelectPrompt: "(Past Cases)",
+        targetScopeAll: "All Targets",
         brandTitle: "Ariadns Forensic Workbench",
         domainPlaceholder: "Enter target domain, e.g. example.com",
         loadSession: "Load Session",
@@ -1129,6 +1157,8 @@
 
     let currentLang = localStorage.getItem("ariadns_lang") || "zh";
     let currentSession = "";
+    let currentTargetScope = "ALL";
+    let cachedSessionData = null;
     let currentImageFormat = localStorage.getItem("ariadns_format") || "svg";
     let currentDepth = localStorage.getItem("ariadns_depth") || "1";
     let manifestData = null;
@@ -1150,6 +1180,12 @@
       document.getElementById("lblElapsed").textContent = t.indicatorElapsed;
       document.getElementById("btnLangToggle").textContent = t.langBtn;
       document.getElementById("btnOpenSettings").textContent = t.settingsBtn;
+
+      // Case and Target dropdown labels
+      const casePromptOpt = document.getElementById("caseSelect").querySelector("option[value='']");
+      if (casePromptOpt) casePromptOpt.textContent = t.caseSelectPrompt;
+      const targetAllOpt = document.getElementById("targetScopeSelect").querySelector("option[value='ALL']");
+      if (targetAllOpt) targetAllOpt.textContent = t.targetScopeAll;
 
       // Status pill target & status text if default
       if (!currentSession) {
@@ -1357,6 +1393,63 @@
     let stopwatchTimer = null;
     let stopwatchStartTime = 0;
 
+    async function refreshCaseSelector() {
+      try {
+        const resp = await fetch("/api/sessions");
+        const data = await resp.json();
+        const sel = document.getElementById("caseSelect");
+        const t = TRANSLATIONS[currentLang];
+        sel.innerHTML = `<option value="">${t.caseSelectPrompt}</option>`;
+        if (data && data.sessions) {
+          data.sessions.forEach(s => {
+            const opt = document.createElement("option");
+            opt.value = s.session_id;
+            opt.textContent = `${s.session_id} (${s.proposition_count} 節點)`;
+            if (s.session_id === currentSession) {
+              opt.selected = true;
+            }
+            sel.appendChild(opt);
+          });
+        }
+      } catch (err) {
+        console.error("Failed to list sessions:", err);
+      }
+    }
+
+    function onCaseSelectChange() {
+      const sel = document.getElementById("caseSelect");
+      if (sel.value) {
+        document.getElementById("domainInput").value = sel.value;
+        loadSession();
+      }
+    }
+
+    function onTargetScopeChange() {
+      const scopeSel = document.getElementById("targetScopeSelect");
+      currentTargetScope = scopeSel.value;
+      if (cachedSessionData) {
+        renderFilteredSessionData();
+      }
+    }
+
+    function updateTargetScopeDropdown(targets) {
+      const sel = document.getElementById("targetScopeSelect");
+      const t = TRANSLATIONS[currentLang];
+      const prevVal = currentTargetScope;
+      sel.innerHTML = `<option value="ALL">${t.targetScopeAll}</option>`;
+      const uniqueTargets = Array.from(new Set(targets || []));
+      uniqueTargets.forEach(tgt => {
+        const opt = document.createElement("option");
+        opt.value = tgt;
+        opt.textContent = tgt;
+        if (tgt === prevVal) {
+          opt.selected = true;
+        }
+        sel.appendChild(opt);
+      });
+      currentTargetScope = sel.value;
+    }
+
     function startStopwatch() {
       if (stopwatchTimer) clearInterval(stopwatchTimer);
       stopwatchStartTime = Date.now();
@@ -1385,6 +1478,7 @@
       const t = TRANSLATIONS[currentLang];
       propositionsData = [];
       manifestData = null;
+      cachedSessionData = null;
 
       // Reset Graph Area
       const wrapper = document.getElementById("graphImageWrapper");
@@ -1443,6 +1537,7 @@
 
       if (isNewTarget) {
         clearSessionDisplays();
+        currentTargetScope = "ALL";
       }
 
       document.getElementById("indTarget").textContent = currentSession;
@@ -1459,7 +1554,10 @@
           stopStopwatch();
         }
         document.getElementById("indProgress").textContent = t.readyStatus;
-        renderSessionData(data);
+        cachedSessionData = data;
+        updateTargetScopeDropdown(data.targets || [currentSession]);
+        refreshCaseSelector();
+        renderFilteredSessionData();
       } catch (err) {
         if (!preserveElapsed) {
           stopStopwatch();
@@ -1469,9 +1567,16 @@
       }
     }
 
-    function renderSessionData(data) {
+    function renderFilteredSessionData() {
+      if (!cachedSessionData) return;
       const t = TRANSLATIONS[currentLang];
-      propositionsData = data.propositions || [];
+      const allProps = cachedSessionData.propositions || [];
+
+      // Filter by currentTargetScope if not ALL
+      propositionsData = (currentTargetScope === "ALL")
+        ? allProps
+        : allProps.filter(p => p.target_entity.toLowerCase() === currentTargetScope.toLowerCase());
+
       const propList = document.getElementById("propList");
       propList.innerHTML = "";
 
@@ -1497,7 +1602,10 @@
       // Recommendations
       const recContainer = document.getElementById("recContainer");
       recContainer.innerHTML = "";
-      const recs = data.recommendations || [];
+      const allRecs = cachedSessionData.recommendations || [];
+      const recs = (currentTargetScope === "ALL")
+        ? allRecs
+        : allRecs.filter(r => r.recommended_target.toLowerCase() === currentTargetScope.toLowerCase());
       document.getElementById("recCount").textContent = `${recs.length} ${t.recActive}`;
 
       if (recs.length === 0) {
@@ -1523,7 +1631,10 @@
       // Audit Table
       const auditBody = document.getElementById("auditTableBody");
       auditBody.innerHTML = "";
-      const logs = data.audit_logs || [];
+      const allLogs = cachedSessionData.audit_logs || [];
+      const logs = (currentTargetScope === "ALL")
+        ? allLogs
+        : allLogs.filter(l => l.target.toLowerCase() === currentTargetScope.toLowerCase());
       if (logs.length === 0) {
         auditBody.innerHTML = `<tr><td colspan="6" id="txtNoAudit" style="text-align:center; color: var(--text-faint);">${t.noAudit}</td></tr>`;
       } else {
@@ -1569,16 +1680,16 @@
       const wrapper = document.getElementById("graphImageWrapper");
       const empty = document.getElementById("graphEmptyState");
       const watermark = document.getElementById("watermarkHash");
-      if (data.manifest && (data.svg_url || data.png_url)) {
-        manifestData = data.manifest;
-        if (watermark) watermark.textContent = data.payload_sha256 || t.watermarkNotRendered;
-        const imgUrl = (currentImageFormat === "svg") ? data.svg_url : data.png_url;
+      if (cachedSessionData.manifest && (cachedSessionData.svg_url || cachedSessionData.png_url)) {
+        manifestData = cachedSessionData.manifest;
+        if (watermark) watermark.textContent = cachedSessionData.payload_sha256 || t.watermarkNotRendered;
+        const imgUrl = (currentImageFormat === "svg") ? cachedSessionData.svg_url : cachedSessionData.png_url;
         if (wrapper && empty) {
           wrapper.innerHTML = `<img id="evidenceGraphImg" class="graph-image" alt="Ariadns Evidence Architecture DAG" src="${imgUrl}&t=${Date.now()}">`;
           wrapper.style.display = "block";
           empty.style.display = "none";
         }
-        renderManifestTable(data.manifest);
+        renderManifestTable(cachedSessionData.manifest);
       } else {
         manifestData = null;
         if (watermark) watermark.textContent = t.watermarkNotRendered;
@@ -1598,17 +1709,15 @@
         alert(t.enterDomainAlert);
         return;
       }
-      const isNewTarget = (currentSession !== actualTarget);
-      currentSession = actualTarget;
-      document.getElementById("domainInput").value = currentSession;
-
-      if (isNewTarget) {
+      if (!currentSession) {
+        currentSession = actualTarget;
+        document.getElementById("domainInput").value = currentSession;
         clearSessionDisplays();
       }
 
       // Prerequisite guidance check for origin probe (m3) and pivot analysis (m4)
       if (moduleName === "m3" || moduleName === "m4") {
-        const hasBaseline = propositionsData && propositionsData.length > 0;
+        const hasBaseline = cachedSessionData && cachedSessionData.propositions && cachedSessionData.propositions.length > 0;
         if (!hasBaseline) {
           const warningMsg = (moduleName === "m3") ? t.m3PrereqWarning : t.m4PrereqWarning;
           if (!confirm(`${warningMsg}\n\n${t.confirmProceedPrompt}`)) {
@@ -1637,7 +1746,7 @@
         stopStopwatch();
         document.getElementById("indProgress").textContent = t.doneStatus;
 
-        // Reload updated session data while preserving elapsed execution time
+        // Reload updated session data while preserving elapsed execution time and maintaining the active case
         await loadSession(true);
       } catch (err) {
         stopStopwatch();
@@ -1746,6 +1855,7 @@
 
     window.addEventListener("DOMContentLoaded", () => {
       setLanguage(currentLang);
+      refreshCaseSelector();
       const urlParams = new URLSearchParams(window.location.search);
       const sessionParam = urlParams.get("session") || urlParams.get("domain");
       if (sessionParam) {
