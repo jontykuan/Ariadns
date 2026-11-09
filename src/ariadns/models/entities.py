@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field, asdict
 from typing import Any, Optional
-from ariadns.models.enums import OriginVerificationStatus, ConfidenceLevel, NodeType, EdgeType, PropositionKind
+from ariadns.models.enums import ConfidenceLevel, OriginVerificationStatus
 
 @dataclass
 class IdentityProfile:
@@ -32,11 +32,13 @@ class SubdomainRecord:
     status_code: Optional[int] = None
     title: Optional[str] = None
     server: Optional[str] = None
+    tech_stack: list[str] = field(default_factory=list)
 
 @dataclass
 class PivotResult:
     same_origin_domains: list[str] = field(default_factory=list)
     same_mx_domains: list[str] = field(default_factory=list)
+    same_ns_domains: list[str] = field(default_factory=list)
     same_token_domains: list[str] = field(default_factory=list)
 
 @dataclass
@@ -67,6 +69,44 @@ class PropositionNode:
     target_entity: str = ""
     entity_type: str = ""
     custodians: list[DataCustodian] = field(default_factory=list)
+    is_rendered: bool = True
+
+@dataclass
+class WarninglistIndicator:
+    list_name: str
+    indicator_type: str
+    indicator_value: str
+    synced_at: int
+
+@dataclass
+class SessionAuditEntry:
+    session_id: str
+    step_seq: int
+    timestamp: str
+    module_name: str
+    target: str
+    params_json: str
+    added_fact_ids: list[str] = field(default_factory=list)
+    artifact_sha256: str = ""
+
+@dataclass
+class NextStepRecommendation:
+    rec_id: str
+    trigger_fact_ids: list[str]
+    recommended_module: str
+    recommended_target: str
+    rationale: str
+    expected_evidence: str
+    cli_command: str
+
+@dataclass
+class ArtifactManifest:
+    session_id: str
+    payload_sha256: str
+    rendered_prop_ids: list[str] = field(default_factory=list)
+    excluded_prop_ids: list[str] = field(default_factory=list)
+    file_hashes: dict[str, str] = field(default_factory=dict)
+    verified: bool = False
 
 @dataclass
 class InvestigationResult:
