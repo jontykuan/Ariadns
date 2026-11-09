@@ -14,6 +14,7 @@ from ariadns.modules.m6_reporting import render_evidence_artifacts
 from ariadns.modules.m8_recommender import NextStepRecommender
 from ariadns.storage.db import DatabaseManager
 from ariadns.storage.forensic_verifier import verify_case_artifacts
+from ariadns.utils.warninglist_sync import WarninglistSynchronizer
 
 def load_template_html() -> str:
     """Load workbench single page HTML template from disk or fallback."""
@@ -91,6 +92,10 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
 
         if path == "/api/render":
             self._handle_post_render(body)
+            return
+
+        if path == "/api/sync-lists":
+            self._handle_post_sync_lists(body)
             return
 
         self._send_error(404, "Not Found")
@@ -198,6 +203,15 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(200, resp_data)
         except Exception as e:
             self._send_error(500, f"Render failed: {str(e)}")
+
+    def _handle_post_sync_lists(self, body: dict[str, Any]) -> None:
+        orch = self._get_orchestrator()
+        try:
+            syncer = WarninglistSynchronizer(orch.db, orch.http_client, orch.config)
+            status = syncer.ensure_warninglists_synced(force=True)
+            self._send_json(200, {"status": "OK", "result": status.value, "synced": True})
+        except Exception as e:
+            self._send_error(500, f"Warninglist sync failed: {str(e)}")
 
     def _handle_get_image(self, query: dict[str, list[str]]) -> None:
         session_id = query.get("session_id", [""])[0].strip()
