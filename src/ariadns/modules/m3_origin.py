@@ -64,8 +64,14 @@ class OriginDetector:
         self.db.set_dns_cache(domain, "PDNS_HISTORY", {"ips": ip_list}, ttl_seconds=self.config.cache_ttl_seconds)
         return ip_list
 
-    def verify_candidate_origin(self, domain: str, candidate_ip: str, reference_title: str | None = None) -> bool:
-        """Verify candidate IP via Host Header collision & title/banner matching."""
+    def verify_candidate_origin(
+        self,
+        domain: str,
+        candidate_ip: str,
+        reference_title: str | None = None,
+        reference_favicon_sha256: str | None = None
+    ) -> bool:
+        """Verify candidate IP via Host Header collision & title/favicon/banner matching."""
         is_cdn, _, _ = detect_cdn(candidate_ip)
         if is_cdn:
             return False
@@ -73,6 +79,19 @@ class OriginDetector:
         headers = {"Host": domain, "User-Agent": "Ariadns/1.0"}
         for proto in ["https", "http"]:
             try:
+                # Check Favicon matching if reference exists
+                if reference_favicon_sha256:
+                    fav_url = f"{proto}://{candidate_ip}/favicon.ico"
+                    try:
+                        with httpx.Client(timeout=self.config.http_timeout_seconds, verify=False, follow_redirects=True) as client:
+                            fav_r = client.get(fav_url, headers=headers)
+                            if fav_r.status_code == 200 and len(fav_r.content) > 10:
+                                h = hashlib.sha256(fav_r.content).hexdigest()
+                                if h == reference_favicon_sha256:
+                                    return True
+                    except Exception:
+                        pass
+
                 with httpx.Client(timeout=self.config.http_timeout_seconds, verify=False, follow_redirects=True) as client:
                     resp = client.get(f"{proto}://{candidate_ip}/", headers=headers)
                     if resp.status_code == 200:
@@ -80,18 +99,23 @@ class OriginDetector:
                         cand_title = None
                         if "<title>" in body and "</title>" in body:
                             cand_title = body.split("<title>")[1].split("</title>")[0].strip()
-                        
+
                         # Match reference title if available
                         if reference_title and cand_title and reference_title.lower() == cand_title.lower():
                             return True
-                        # If status 200 returned on matching Host header, consider suspected/confirmed
                         if resp.status_code == 200 and cand_title:
                             return True
             except Exception:
                 continue
         return False
 
-    def detect_origin(self, domain: str, current_ip: str | None, live_title: str | None = None) -> tuple[str | None, str]:
+    def detect_origin(
+        self,
+        domain: str,
+        current_ip: str | None,
+        live_title: str | None = None,
+        live_favicon_sha256: str | None = None
+    ) -> tuple[str | None, str]:
         if not current_ip:
             return None, OriginVerificationStatus.NOT_APPLICABLE.value
 
@@ -106,7 +130,7 @@ class OriginDetector:
             is_cand_cdn, _, _ = detect_cdn(cand)
             if is_cand_cdn:
                 continue
-            if self.verify_candidate_origin(domain, cand, reference_title=live_title):
+            if self.verify_candidate_origin(domain, cand, reference_title=live_title, reference_favicon_sha256=live_favicon_sha256):
                 return cand, OriginVerificationStatus.CONFIRMED.value
             return cand, OriginVerificationStatus.SUSPECTED.value
 

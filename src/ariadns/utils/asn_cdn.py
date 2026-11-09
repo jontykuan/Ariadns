@@ -1,4 +1,5 @@
 import ipaddress
+from typing import Any
 import dns.resolver
 
 CDN_ASN_MAP = {
@@ -26,40 +27,68 @@ KNOWN_CDN_CIDRS = [
     ("23.0.0.0/12", "Akamai", "AS16625"),
 ]
 
-def resolve_ip_asn(ip: str) -> str:
-    """Resolve ASN for an IP using Team Cymru DNS (zero external HTTP quota)."""
+def resolve_ip_asn_details(ip: str) -> dict[str, Any]:
+    """Resolve ASN, country, and ASN organization name using Team Cymru DNS (zero external HTTP quota)."""
+    details = {
+        "asn": "",
+        "country": "",
+        "rir": "",
+        "asn_org_name": "",
+    }
     try:
         parts = ip.strip().split(".")
         if len(parts) != 4:
-            return ""
+            return details
         rev_ip = ".".join(reversed(parts))
-        query_host = f"{rev_ip}.origin.asn.cymru.com"
+        origin_host = f"{rev_ip}.origin.asn.cymru.com"
         resolver = dns.resolver.Resolver()
         resolver.timeout = 2.0
         resolver.lifetime = 2.0
-        answers = resolver.resolve(query_host, "TXT")
-        for rdata in answers:
-            # Format: "13335 | 104.16.0.0/12 | US | arin | 2014-03-28"
+        origin_answers = resolver.resolve(origin_host, "TXT")
+        asn_num = ""
+        for rdata in origin_answers:
             txt = rdata.to_text().strip('"')
-            asn_raw = txt.split("|")[0].strip()
-            if asn_raw:
-                return f"AS{asn_raw}"
+            parts = [p.strip() for p in txt.split("|")]
+            if parts and parts[0]:
+                asn_num = parts[0]
+                details["asn"] = f"AS{asn_num}"
+                if len(parts) > 2:
+                    details["country"] = parts[2]
+                if len(parts) > 3:
+                    details["rir"] = parts[3]
+                break
+
+        if asn_num:
+            as_host = f"AS{asn_num}.asn.cymru.com"
+            as_answers = resolver.resolve(as_host, "TXT")
+            for rdata in as_answers:
+                txt = rdata.to_text().strip('"')
+                as_parts = [p.strip() for p in txt.split("|")]
+                if len(as_parts) > 4:
+                    details["asn_org_name"] = as_parts[4]
+                elif len(as_parts) > 1:
+                    details["asn_org_name"] = as_parts[-1]
+                break
     except Exception:
         pass
-    return ""
+
+    return details
+
+def resolve_ip_asn(ip: str) -> str:
+    """Resolve ASN for an IP using Team Cymru DNS (zero external HTTP quota)."""
+    res = resolve_ip_asn_details(ip)
+    return res.get("asn", "")
 
 def detect_cdn(ip: str) -> tuple[bool, str | None, str | None]:
     """Determine if IP belongs to a CDN via local CIDR match or Cymru DNS ASN."""
     try:
         ip_obj = ipaddress.ip_address(ip.strip())
-        # 1. Local CIDR check
         for cidr_str, provider, asn in KNOWN_CDN_CIDRS:
             if ip_obj in ipaddress.ip_network(cidr_str):
                 return True, provider, asn
     except ValueError:
         return False, None, None
 
-    # 2. DNS ASN check
     asn = resolve_ip_asn(ip)
     if asn and asn in CDN_ASN_MAP:
         return True, CDN_ASN_MAP[asn], asn
