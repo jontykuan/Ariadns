@@ -45,3 +45,7 @@ class EdgeType(str, Enum):
     SAME_MX = "SAME_MX"
     SAME_NS = "SAME_NS"
     SAME_TOKEN = "SAME_TOKEN"
+
+class PropositionKind(str, Enum):
+    FACT = "FACT"
+    CONCLUSION = "CONCLUSION"
