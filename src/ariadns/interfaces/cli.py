@@ -66,6 +66,14 @@ def build_parser() -> argparse.ArgumentParser:
     oob_parser.add_argument("-m", "--method", default="GET", choices=["GET", "POST"], help="HTTP method")
     oob_parser.add_argument("--ack-risk", action="store_true", help="Acknowledge OPSEC risk to proceed with probe")
 
+    # Command: ui (local web UI forensic workbench)
+    ui_parser = subparsers.add_parser("ui", help="Start local web UI forensic workbench")
+    ui_parser.add_argument("--host", default="127.0.0.1", help="Host to bind (default: 127.0.0.1)")
+    ui_parser.add_argument("--port", type=int, default=8000, help="Port to bind (default: 8000)")
+    ui_parser.add_argument("--db-path", help="Optional path to SQLite database")
+    ui_parser.add_argument("--output-dir", default="./reports", help="Output directory")
+    ui_parser.add_argument("--open-browser", action="store_true", help="Open browser automatically")
+
     # Command: repl (interactive console)
     repl_parser = subparsers.add_parser("repl", help="Start interactive REPL console")
     repl_parser.add_argument("-d", "--domain", help="Initial target domain (optional)")
@@ -202,6 +210,17 @@ def execute_manual_oob(target_url: str, callback_url: str, param: str, method: s
     print(f"    Note: {res.get('note')}")
     return 0
 
+def execute_ui(host: str, port: int, db_path: Optional[str], output_dir: str, open_browser: bool) -> int:
+    from ariadns.interfaces.web_ui import start_web_ui
+    server = start_web_ui(host=host, port=port, db_path=db_path, output_dir=output_dir, open_browser=open_browser)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\n[*] Web UI stopped.")
+    finally:
+        server.server_close()
+    return 0
+
 def execute_doctor() -> int:
     print("[*] Ariadns System Dependency Check:")
     tools = check_environment()
@@ -259,6 +278,14 @@ def main(args: list[str] | None = None) -> int:
         return execute_doctor()
     elif parsed.command == "init":
         return execute_init()
+    elif parsed.command == "ui":
+        return execute_ui(
+            host=parsed.host,
+            port=parsed.port,
+            db_path=parsed.db_path,
+            output_dir=parsed.output_dir,
+            open_browser=parsed.open_browser,
+        )
     elif parsed.command == "repl":
         from ariadns.interfaces.repl import start_repl
         return start_repl(parsed.domain)

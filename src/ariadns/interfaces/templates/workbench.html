@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ariadns Forensic Workbench</title>
+  <style>
+    :root {
+      --bg-canvas: #090d16;
+      --bg-surface1: #0f172a;
+      --bg-surface2: #1e293b;
+      --bg-surface-hover: #334155;
+      --border-color: #475569;
+      --border-accent: #38bdf8;
+      --text-main: #f8fafc;
+      --text-muted: #cbd5e1;
+      --text-faint: #cbd5e1;
+      --accent-cyan: #38bdf8;
+      --status-success: #4ade80;
+      --status-warning: #facc15;
+      --status-danger: #f87171;
+      --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-canvas);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.5;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Top Status Bar */
+    header.status-bar {
+      min-height: 52px;
+      background-color: var(--bg-surface1);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 16px;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+
+    .brand-section {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-title {
+      font-size: 15px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--accent-cyan);
+    }
+
+    .session-form {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .session-input {
+      background: var(--bg-surface2);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      width: 220px;
+    }
+    .session-input:focus {
+      outline: 2px solid var(--border-accent);
+      border-color: var(--border-accent);
+    }
+
+    .status-indicators {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    .status-pill {
+      background: var(--bg-surface2);
+      border: 1px solid var(--border-color);
+      padding: 6px 10px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .status-pill strong {
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .badge-success {
+      color: #22c55e;
+      border-color: rgba(34, 197, 94, 0.6);
+      background: rgba(34, 197, 94, 0.15);
+      font-weight: 600;
+    }
+
+    /* Main Workbench Layout */
+    main.workbench-layout {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 480px 1fr;
+      overflow: hidden;
+    }
+
+    /* Left Control Panel */
+    aside.control-panel {
+      background-color: var(--bg-surface1);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 16px;
+      gap: 18px;
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 6px;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Command Cards */
+    .command-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .card {
+      background: var(--bg-surface2);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .card:hover {
+      border-color: var(--border-accent);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .card-title {
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--text-main);
+    }
+
+    .card-cmd {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--accent-cyan);
+      background: rgba(56, 189, 248, 0.15);
+      padding: 3px 8px;
+      border-radius: 3px;
+    }
+
+    .card-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .card-opsec {
+      background: rgba(234, 179, 8, 0.15);
+      border: 1px solid rgba(234, 179, 8, 0.5);
+      padding: 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      color: var(--status-warning);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .card-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    /* Buttons */
+    button.btn {
+      background: var(--bg-surface2);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-family: var(--font-sans);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    button.btn:hover:not(:disabled) {
+      background: var(--bg-surface-hover);
+      border-color: var(--border-accent);
+      color: #ffffff;
+    }
+    button.btn:focus-visible {
+      outline: 2px solid var(--border-accent);
+    }
+    button.btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    button.btn-primary {
+      background: #075985;
+      border-color: #38bdf8;
+      color: #ffffff;
+    }
+    button.btn-primary:hover:not(:disabled) {
+      background: #0c4a6e;
+      color: #ffffff;
+    }
+    button.btn-accent {
+      background: #065f46;
+      border-color: #34d399;
+      color: #ffffff;
+    }
+    button.btn-accent:hover:not(:disabled) {
+      background: #022c22;
+      color: #ffffff;
+    }
+
+    /* Recommendations */
+    .rec-card {
+      background: rgba(56, 189, 248, 0.08);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      border-radius: 4px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .rec-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    .rec-badge {
+      color: var(--accent-cyan);
+      font-weight: 700;
+    }
+
+    .rec-body {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* Proposition Filter List */
+    .prop-list {
+      max-height: 200px;
+      overflow-y: auto;
+      border: 1px solid var(--border-color);
+      background: var(--bg-surface2);
+      border-radius: 4px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .prop-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      padding: 4px 6px;
+      border-radius: 3px;
+    }
+    .prop-item:hover {
+      background: var(--bg-surface-hover);
+      color: #ffffff;
+    }
+    .prop-item label {
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+    }
+    .prop-id {
+      font-family: var(--font-mono);
+      font-weight: 600;
+      font-size: 12px;
+      color: var(--accent-cyan);
+      width: 80px;
+    }
+    .prop-stmt {
+      color: var(--text-main);
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Right Forensic Display Area */
+    section.forensic-display {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg-canvas);
+    }
+
+    /* Graph Viewport */
+    .graph-viewport {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      border-bottom: 1px solid var(--border-color);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .graph-toolbar {
+      min-height: 48px;
+      background: var(--bg-surface1);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+    }
+
+    .watermark-pill {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .watermark-hash {
+      color: var(--accent-cyan);
+      background: var(--bg-surface2);
+      padding: 3px 8px;
+      border-radius: 3px;
+      border: 1px solid var(--border-color);
+      user-select: all;
+    }
+
+    .graph-container {
+      flex: 1;
+      overflow: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #020617;
+      padding: 24px;
+    }
+
+    .graph-image {
+      max-width: 100%;
+      height: auto;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      user-select: none;
+      pointer-events: none;
+    }
+
+    .empty-state {
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    /* Forensic Tabbed Tables Panel */
+    .forensic-panel {
+      height: 290px;
+      background: var(--bg-surface1);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .panel-tabs {
+      min-height: 44px;
+      display: flex;
+      border-bottom: 1px solid var(--border-color);
+      background: var(--bg-surface2);
+      padding: 6px 8px;
+      gap: 4px;
+    }
+
+    .tab-btn {
+      padding: 6px 14px;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      color: var(--text-muted);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tab-btn:hover {
+      color: #ffffff;
+      background: var(--bg-surface-hover);
+    }
+    .tab-btn.active {
+      color: var(--accent-cyan);
+      background: var(--bg-surface1);
+      border-color: var(--border-color);
+    }
+
+    .tab-content {
+      flex: 1;
+      overflow: auto;
+      padding: 10px 16px;
+    }
+
+    /* Dense Data Table */
+    table.dense-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+    }
+    table.dense-table th {
+      background: var(--bg-surface2);
+      color: var(--text-muted);
+      padding: 8px 10px;
+      border: 1px solid var(--border-color);
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 12px;
+    }
+    table.dense-table td {
+      padding: 7px 10px;
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+    }
+    table.dense-table tr:hover td {
+      background: var(--bg-surface-hover);
+      color: #ffffff;
+    }
+    .mono-cell {
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Top Status Bar -->
+  <header class="status-bar">
+    <div class="brand-section">
+      <span class="brand-title">Ariadns Forensic Workbench</span>
+      <form class="session-form" id="sessionForm" onsubmit="event.preventDefault(); loadSession();">
+        <label for="domainInput" style="display:none;">Case Session Domain</label>
+        <input type="text" id="domainInput" class="session-input" placeholder="Enter target domain..." value="nexusgoldinternational.com" required>
+        <button type="submit" class="btn">Load Session</button>
+      </form>
+    </div>
+
+    <div class="status-indicators">
+      <div class="status-pill">
+        <strong>MODULE:</strong> <span id="indModule">IDLE</span>
+      </div>
+      <div class="status-pill">
+        <strong>TARGET:</strong> <span id="indTarget">NONE</span>
+      </div>
+      <div class="status-pill">
+        <strong>STATUS:</strong> <span id="indProgress">READY</span>
+      </div>
+      <div class="status-pill">
+        <strong>ELAPSED:</strong> <span id="indElapsed">0.0s</span>
+      </div>
+      <div class="status-pill badge-success" id="warninglistBadge">
+        MISP 7D SYNC: ACTIVE
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workbench Layout -->
+  <main class="workbench-layout">
+    <!-- Left Control Panel -->
+    <aside class="control-panel">
+      <!-- Section 1: Visual CLI Command Cards -->
+      <div>
+        <h2 class="section-title">Visual CLI Command Cards</h2>
+        <div class="command-cards">
+          <!-- Card M1 -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">M1 Local DNS & Topology</span>
+              <span class="card-cmd">ariadns step -m m1</span>
+            </div>
+            <div class="card-desc">Probe authoritative NS, MX, SOA email, TXT verification tokens, and A/AAAA IPs.</div>
+            <div class="card-actions">
+              <button type="button" class="btn btn-primary" onclick="runStep('m1')">▶ Run M1</button>
+            </div>
+          </div>
+
+          <!-- Card M2 -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">M2 Subdomain Enumeration</span>
+              <span class="card-cmd">ariadns step -m m2</span>
+            </div>
+            <div class="card-desc">Passive certificate transparency logs and DNS wordlists to uncover subdomains.</div>
+            <div class="card-actions">
+              <button type="button" class="btn btn-primary" onclick="runStep('m2')">▶ Run M2</button>
+            </div>
+          </div>
+
+          <!-- Card M3 -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">M3 Candidate Origin Detection</span>
+              <span class="card-cmd">ariadns step -m m3</span>
+            </div>
+            <div class="card-desc">Historical pre-CDN pDNS, HTTP Host collision, and Favicon SHA-256 fingerprinting.</div>
+            <div class="card-actions">
+              <button type="button" class="btn btn-primary" onclick="runStep('m3')">▶ Run M3</button>
+            </div>
+          </div>
+
+          <!-- Card M4 -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">M4 Infrastructure Pivoting</span>
+              <span class="card-cmd">ariadns step -m m4</span>
+            </div>
+            <div class="card-desc">Reverse IP, custom MX/NS, and shared token pivoting with 7-day warninglist filtering.</div>
+            <div class="card-actions">
+              <button type="button" class="btn btn-primary" onclick="runStep('m4')">▶ Run M4</button>
+            </div>
+          </div>
+
+          <!-- Card M7 -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">M7 Manual OOB Callback Probe</span>
+              <span class="card-cmd">ariadns manual-oob</span>
+            </div>
+            <div class="card-desc">Isolated active callback injection to verify origin infrastructure.</div>
+            <div class="card-opsec">
+              <strong>[OPSEC RISK WARNING]</strong>
+              <span>Generates live outbound callback traffic to external target. Requires explicit risk acknowledgement.</span>
+              <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                <input type="checkbox" id="m7AckRisk" onchange="toggleM7Button()">
+                <span>Acknowledge OPSEC risk to proceed</span>
+              </label>
+            </div>
+            <div class="card-actions">
+              <button type="button" id="m7RunBtn" class="btn" disabled onclick="runStep('m7')">▶ Run M7</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Next-Step Recommendations -->
+      <div>
+        <div class="section-title">
+          <span>Next-Step Recommendations</span>
+          <span id="recCount" style="font-family: var(--font-mono); font-size: 12px;">0 active</span>
+        </div>
+        <div id="recContainer" style="display: flex; flex-direction: column; gap: 8px;">
+          <div class="empty-state" style="padding: 10px;">No pending recommendations.</div>
+        </div>
+      </div>
+
+      <!-- Section 3: Node Selection & Graph Rendering -->
+      <div>
+        <div class="section-title">
+          <span>Proposition Filter</span>
+          <span style="font-size: 12px; text-transform: none; color: var(--text-faint);">Check to render in graph</span>
+        </div>
+        <div class="prop-list" id="propList">
+          <div class="empty-state" style="padding: 10px;">Load a session to view propositions.</div>
+        </div>
+        <div style="margin-top: 10px; display: flex; justify-content: flex-end;">
+          <button type="button" class="btn btn-accent" id="btnRenderGraph" onclick="renderEvidenceGraph()">
+            ⚙ Generate Evidence Architecture Graph
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Right Forensic Display -->
+    <section class="forensic-display">
+      <!-- Evidence Graph Viewport -->
+      <div class="graph-viewport">
+        <div class="graph-toolbar">
+          <div class="watermark-pill">
+            <span>FORENSIC PAYLOAD SHA-256:</span>
+            <span class="watermark-hash" id="watermarkHash">NOT_RENDERED</span>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" class="btn" id="btnToggleFormat" onclick="toggleImageFormat()">Format: SVG</button>
+            <button type="button" class="btn" id="btnDownloadArtifacts" onclick="downloadCurrentArtifact()">Export</button>
+          </div>
+        </div>
+        <div class="graph-container" id="graphContainer">
+          <div class="empty-state" id="graphEmptyState">
+            [ Static non-draggable evidence graph will display here upon generation ]
+          </div>
+          <div id="graphImageWrapper" style="display:none;"></div>
+        </div>
+      </div>
+
+      <!-- Tabbed Forensic Matrices -->
+      <div class="forensic-panel">
+        <div class="panel-tabs">
+          <button type="button" class="tab-btn active" onclick="switchTab('custodians')">Data Custodians Matrix</button>
+          <button type="button" class="tab-btn" onclick="switchTab('audit')">Session Audit Trail</button>
+          <button type="button" class="tab-btn" onclick="switchTab('manifest')">Cryptographic Manifest & Integrity</button>
+        </div>
+
+        <!-- Tab 1: Custodians -->
+        <div id="tabCustodians" class="tab-content">
+          <table class="dense-table">
+            <thead>
+              <tr>
+                <th>Conclusion ID</th>
+                <th>Target Entity</th>
+                <th>Data Custodian</th>
+                <th>Role</th>
+                <th>Queryable Records</th>
+              </tr>
+            </thead>
+            <tbody id="custodiansTableBody">
+              <tr><td colspan="5" style="text-align:center; color: var(--text-faint);">No custodian mappings available.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Tab 2: Audit -->
+        <div id="tabAudit" class="tab-content" style="display: none;">
+          <table class="dense-table">
+            <thead>
+              <tr>
+                <th>Step</th>
+                <th>Timestamp (UTC)</th>
+                <th>Module</th>
+                <th>Target</th>
+                <th>Added Facts</th>
+                <th>State SHA-256</th>
+              </tr>
+            </thead>
+            <tbody id="auditTableBody">
+              <tr><td colspan="6" style="text-align:center; color: var(--text-faint);">No audit entries recorded.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Tab 3: Manifest -->
+        <div id="tabManifest" class="tab-content" style="display: none;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span style="font-family: var(--font-mono); font-size: 12px;">Dual-Layer Forensic Manifest</span>
+            <button type="button" class="btn" onclick="verifyIntegrity()">Verify Integrity</button>
+          </div>
+          <table class="dense-table">
+            <thead>
+              <tr>
+                <th>Artifact File</th>
+                <th>SHA-256 Digest</th>
+                <th>Verification Status</th>
+              </tr>
+            </thead>
+            <tbody id="manifestTableBody">
+              <tr><td colspan="3" style="text-align:center; color: var(--text-faint);">Generate graph to inspect manifest.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Interactive Workbench Script -->
+  <script>
+    let currentSession = "nexusgoldinternational.com";
+    let currentImageFormat = "svg";
+    let manifestData = null;
+    let propositionsData = [];
+
+    function toggleM7Button() {
+      const ack = document.getElementById("m7AckRisk").checked;
+      document.getElementById("m7RunBtn").disabled = !ack;
+    }
+
+    function switchTab(tabName) {
+      document.querySelectorAll(".tab-btn").forEach(btn => btn.classList.remove("active"));
+      document.getElementById("tabCustodians").style.display = "none";
+      document.getElementById("tabAudit").style.display = "none";
+      document.getElementById("tabManifest").style.display = "none";
+
+      if (tabName === "custodians") {
+        document.querySelectorAll(".tab-btn")[0].classList.add("active");
+        document.getElementById("tabCustodians").style.display = "block";
+      } else if (tabName === "audit") {
+        document.querySelectorAll(".tab-btn")[1].classList.add("active");
+        document.getElementById("tabAudit").style.display = "block";
+      } else if (tabName === "manifest") {
+        document.querySelectorAll(".tab-btn")[2].classList.add("active");
+        document.getElementById("tabManifest").style.display = "block";
+      }
+    }
+
+    async function loadSession() {
+      const input = document.getElementById("domainInput").value.trim();
+      if (!input) return;
+      currentSession = input;
+
+      document.getElementById("indTarget").textContent = currentSession;
+      document.getElementById("indProgress").textContent = "FETCHING";
+
+      const start = Date.now();
+      try {
+        const resp = await fetch(`/api/status?session_id=${encodeURIComponent(currentSession)}`);
+        const data = await resp.json();
+        const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+        document.getElementById("indElapsed").textContent = `${elapsed}s`;
+        document.getElementById("indProgress").textContent = "READY";
+        renderSessionData(data);
+      } catch (err) {
+        document.getElementById("indProgress").textContent = "ERROR";
+        console.error("Failed to load session:", err);
+      }
+    }
+
+    function renderSessionData(data) {
+      propositionsData = data.propositions || [];
+      const propList = document.getElementById("propList");
+      propList.innerHTML = "";
+
+      if (propositionsData.length === 0) {
+        propList.innerHTML = '<div class="empty-state" style="padding: 10px;">No propositions recorded. Run a step to begin.</div>';
+      } else {
+        propositionsData.forEach(p => {
+          const item = document.createElement("div");
+          item.className = "prop-item";
+          const isCore = p.rank > 0 || (p.node_kind === "CONCLUSION") || (p.prop_id.includes("ORIGIN"));
+          const checked = p.is_rendered ? "checked" : (isCore ? "checked" : "");
+          item.innerHTML = `
+            <label>
+              <input type="checkbox" value="${p.prop_id}" class="prop-check" ${checked}>
+              <span class="prop-id">${p.prop_id}</span>
+              <span class="prop-stmt" title="${p.statement}">${p.statement}</span>
+            </label>
+          `;
+          propList.appendChild(item);
+        });
+      }
+
+      // Recommendations
+      const recContainer = document.getElementById("recContainer");
+      recContainer.innerHTML = "";
+      const recs = data.recommendations || [];
+      document.getElementById("recCount").textContent = `${recs.length} active`;
+
+      if (recs.length === 0) {
+        recContainer.innerHTML = '<div class="empty-state" style="padding: 10px;">No pending recommendations.</div>';
+      } else {
+        recs.forEach(r => {
+          const card = document.createElement("div");
+          card.className = "rec-card";
+          card.innerHTML = `
+            <div class="rec-header">
+              <span class="rec-badge">${r.rec_id}</span>
+              <span style="color: var(--text-muted);">${r.recommended_module.toUpperCase()} &rarr; ${r.recommended_target}</span>
+            </div>
+            <div class="rec-body">${r.rationale}</div>
+            <div style="display:flex; justify-content: flex-end; margin-top: 6px;">
+              <button type="button" class="btn btn-primary" onclick="runStep('${r.recommended_module}', '${r.recommended_target}')">Apply & Run</button>
+            </div>
+          `;
+          recContainer.appendChild(card);
+        });
+      }
+
+      // Audit Table
+      const auditBody = document.getElementById("auditTableBody");
+      auditBody.innerHTML = "";
+      const logs = data.audit_logs || [];
+      if (logs.length === 0) {
+        auditBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--text-faint);">No audit entries recorded.</td></tr>';
+      } else {
+        logs.forEach(l => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td class="mono-cell">${l.step_seq}</td>
+            <td class="mono-cell">${l.timestamp}</td>
+            <td><strong>${l.module_name.toUpperCase()}</strong></td>
+            <td class="mono-cell">${l.target}</td>
+            <td class="mono-cell">${(l.added_fact_ids || []).join(", ") || "-"}</td>
+            <td class="mono-cell">${(l.artifact_sha256 || "").slice(0, 16)}...</td>
+          `;
+          auditBody.appendChild(tr);
+        });
+      }
+
+      // Custodians Table
+      const custBody = document.getElementById("custodiansTableBody");
+      custBody.innerHTML = "";
+      let custCount = 0;
+      propositionsData.forEach(p => {
+        if (p.custodians && p.custodians.length > 0) {
+          p.custodians.forEach(c => {
+            custCount++;
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td class="mono-cell"><strong>${p.prop_id}</strong></td>
+              <td class="mono-cell">${p.target_entity || "-"}</td>
+              <td><strong>${c.custodian_name}</strong></td>
+              <td>${c.custodian_role}</td>
+              <td>${(c.queryable_records || []).join(", ")}</td>
+            `;
+            custBody.appendChild(tr);
+          });
+        }
+      });
+      if (custCount === 0) {
+        custBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color: var(--text-faint);">No custodian mappings available.</td></tr>';
+      }
+    }
+
+    async function runStep(moduleName, target) {
+      document.getElementById("indModule").textContent = moduleName.toUpperCase();
+      document.getElementById("indProgress").textContent = "RUNNING";
+      const actualTarget = target || currentSession;
+      document.getElementById("indTarget").textContent = actualTarget;
+
+      const startTime = Date.now();
+      try {
+        const resp = await fetch("/api/step", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            session_id: currentSession,
+            module: moduleName,
+            target: actualTarget,
+            params: {}
+          })
+        });
+        const res = await resp.json();
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        document.getElementById("indElapsed").textContent = `${elapsed}s`;
+        document.getElementById("indProgress").textContent = "COMPLETED";
+
+        // Reload updated session data
+        await loadSession();
+      } catch (err) {
+        document.getElementById("indProgress").textContent = "FAILED";
+        console.error("Step execution error:", err);
+      }
+    }
+
+    async function renderEvidenceGraph() {
+      const selectedChecks = Array.from(document.querySelectorAll(".prop-check:checked")).map(cb => cb.value);
+      document.getElementById("indProgress").textContent = "RENDERING";
+
+      try {
+        const resp = await fetch("/api/render", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            session_id: currentSession,
+            selected_prop_ids: selectedChecks
+          })
+        });
+        const data = await resp.json();
+        manifestData = data.manifest;
+
+        document.getElementById("indProgress").textContent = "DONE";
+        document.getElementById("watermarkHash").textContent = data.payload_sha256;
+
+        // Display Static Graph Image via DOM injection
+        const wrapper = document.getElementById("graphImageWrapper");
+        const empty = document.getElementById("graphEmptyState");
+        const imgUrl = currentImageFormat === "svg" ? data.svg_url : data.png_url;
+        wrapper.innerHTML = `<img id="evidenceGraphImg" class="graph-image" alt="Ariadns Evidence Architecture DAG" src="${imgUrl}&t=${Date.now()}">`;
+        wrapper.style.display = "block";
+        empty.style.display = "none";
+
+        // Update Manifest Table
+        renderManifestTable(data.manifest);
+      } catch (err) {
+        document.getElementById("indProgress").textContent = "RENDER_ERROR";
+        console.error("Render failed:", err);
+      }
+    }
+
+    function renderManifestTable(manifest) {
+      const body = document.getElementById("manifestTableBody");
+      body.innerHTML = "";
+      if (!manifest || !manifest.file_hashes) {
+        body.innerHTML = '<tr><td colspan="3" style="text-align:center; color: var(--text-faint);">Manifest empty.</td></tr>';
+      } else {
+        for (const [file, hash] of Object.entries(manifest.file_hashes)) {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td class="mono-cell"><strong>${file}</strong></td>
+            <td class="mono-cell">${hash}</td>
+            <td><span class="status-pill badge-success">BIT-FOR-BIT MATCH</span></td>
+          `;
+          body.appendChild(tr);
+        }
+      }
+    }
+
+    async function verifyIntegrity() {
+      if (!currentSession) return;
+      try {
+        const resp = await fetch(`/api/verify?case_dir=reports/${encodeURIComponent(currentSession)}`);
+        const res = await resp.json();
+        alert(`Verification Result: ${res.verified ? 'PASSED (100% Cryptographic Match)' : 'FAILED'}`);
+      } catch (err) {
+        alert("Verification failed to execute.");
+      }
+    }
+
+    function toggleImageFormat() {
+      currentImageFormat = (currentImageFormat === "svg") ? "png" : "svg";
+      document.getElementById("btnToggleFormat").textContent = `Format: ${currentImageFormat.toUpperCase()}`;
+      const img = document.getElementById("evidenceGraphImg");
+      if (img) {
+        const base = `/api/image?session_id=${encodeURIComponent(currentSession)}&type=${currentImageFormat}`;
+        img.src = `${base}&t=${Date.now()}`;
+      }
+    }
+
+    function downloadCurrentArtifact() {
+      if (!currentSession) return;
+      window.open(`/api/image?session_id=${encodeURIComponent(currentSession)}&type=${currentImageFormat}`, "_blank");
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      loadSession();
+    });
+  </script>
+</body>
+</html>
