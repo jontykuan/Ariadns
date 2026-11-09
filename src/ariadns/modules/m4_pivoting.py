@@ -13,6 +13,8 @@ class PivotingEngine:
         self.config = config
 
     def reverse_ip(self, ip: str) -> list[str]:
+        if self.db.is_warninglist_match(ip):
+            return []
         cached = self.db.get_pivot_cache("hackertarget", "reverse_ip", ip)
         if cached is not None:
             return cached if isinstance(cached, list) else []
@@ -38,7 +40,7 @@ class PivotingEngine:
         return domains
 
     def reverse_mx(self, mx_host: str) -> list[str]:
-        if self.config.is_mx_blacklisted(mx_host):
+        if self.config.is_mx_blacklisted(mx_host) or self.db.is_warninglist_match(mx_host):
             return []
         cached = self.db.get_pivot_cache("hackertarget", "reverse_mx", mx_host)
         if cached is not None:
@@ -58,7 +60,7 @@ class PivotingEngine:
         return domains
 
     def reverse_ns(self, ns_host: str) -> list[str]:
-        if self.config.is_ns_blacklisted(ns_host):
+        if self.config.is_ns_blacklisted(ns_host) or self.db.is_warninglist_match(ns_host):
             return []
         cached = self.db.get_pivot_cache("hackertarget", "reverse_ns", ns_host)
         if cached is not None:
