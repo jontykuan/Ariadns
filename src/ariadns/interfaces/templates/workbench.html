@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Ariadns 數位鑑識工作台 (Forensic Workbench)</title>
+  <title>Ariadns 鑑識工作台</title>
   <style>
     :root {
       --bg-canvas: #090d16;
@@ -580,6 +580,13 @@
       outline: 2px solid var(--border-accent);
     }
 
+    .setting-hint {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.4;
+      margin-top: 2px;
+    }
+
     .modal-footer {
       padding: 12px 18px;
       border-top: 1px solid var(--border-color);
@@ -595,8 +602,8 @@
     <div class="brand-section">
       <span class="brand-title" id="txtBrandTitle">Ariadns 鑑識工作台</span>
       <form class="session-form" id="sessionForm" onsubmit="event.preventDefault(); loadSession();">
-        <label for="domainInput" style="display:none;">Case Session Domain</label>
-        <input type="text" id="domainInput" class="session-input" placeholder="請輸入目標網域 (例如 target.com)..." value="" required>
+        <label for="domainInput" style="display:none;">目標網域</label>
+        <input type="text" id="domainInput" class="session-input" placeholder="輸入目標網域，如 example.com" value="" required>
         <button type="submit" class="btn" id="btnLoadSession">載入案件</button>
       </form>
     </div>
@@ -615,15 +622,15 @@
         <strong id="lblElapsed">耗時:</strong> <span id="indElapsed">0.0s</span>
       </div>
       <div class="status-pill badge-success" id="warninglistBadge">
-        MISP 7日同步: 啟用
+        誤報清單: 已同步
       </div>
     </div>
 
     <div class="header-actions">
-      <button type="button" class="btn" id="btnLangToggle" onclick="toggleLanguage()" title="切換語言 / Switch Language">
+      <button type="button" class="btn" id="btnLangToggle" onclick="toggleLanguage()" title="切換語言">
         🌐 繁體中文
       </button>
-      <button type="button" class="btn" id="btnOpenSettings" onclick="openSettingsModal()" title="偏好設定 / Preferences">
+      <button type="button" class="btn" id="btnOpenSettings" onclick="openSettingsModal()" title="偏好設定">
         ⚙ 偏好設定
       </button>
     </div>
@@ -635,17 +642,17 @@
     <aside class="control-panel">
       <!-- Section 1: Visual CLI Command Cards -->
       <div>
-        <h2 class="section-title" id="txtCmdCardsTitle">視覺化 CLI 模組卡片</h2>
+        <h2 class="section-title" id="txtCmdCardsTitle">調查模組</h2>
         <div class="command-cards">
           <!-- Card M1 -->
           <div class="card">
             <div class="card-header">
-              <span class="card-title" id="txtM1Title">M1 本地 DNS 與拓撲分析</span>
+              <span class="card-title" id="txtM1Title">M1 DNS 與網路關聯</span>
               <span class="card-cmd">ariadns step -m m1</span>
             </div>
-            <div class="card-desc" id="txtM1Desc">探測權威 NS、MX、SOA 電子郵件、TXT 驗證標記與 A/AAAA IP 拓撲結構。</div>
+            <div class="card-desc" id="txtM1Desc">查詢權威 NS、MX、SOA 聯絡資訊、TXT 驗證紀錄與 A、AAAA 位址。</div>
             <div class="card-actions">
-              <button type="button" class="btn btn-primary" id="btnRunM1" onclick="runStep('m1')">▶ 執行 M1</button>
+              <button type="button" class="btn btn-primary" id="btnRunM1" onclick="runStep('m1')">執行 M1</button>
             </div>
           </div>
 
@@ -655,53 +662,53 @@
               <span class="card-title" id="txtM2Title">M2 子網域列舉</span>
               <span class="card-cmd">ariadns step -m m2</span>
             </div>
-            <div class="card-desc" id="txtM2Desc">透過憑證透明度日誌 (CT Logs) 與字典列舉探索關聯子網域。</div>
+            <div class="card-desc" id="txtM2Desc">比對憑證透明度紀錄與字典清單，搜集關聯子網域。</div>
             <div class="card-actions">
-              <button type="button" class="btn btn-primary" id="btnRunM2" onclick="runStep('m2')">▶ 執行 M2</button>
+              <button type="button" class="btn btn-primary" id="btnRunM2" onclick="runStep('m2')">執行 M2</button>
             </div>
           </div>
 
           <!-- Card M3 -->
           <div class="card">
             <div class="card-header">
-              <span class="card-title" id="txtM3Title">M3 候選真實原始伺服器偵測</span>
+              <span class="card-title" id="txtM3Title">M3 真實伺服器探測</span>
               <span class="card-cmd">ariadns step -m m3</span>
             </div>
-            <div class="card-desc" id="txtM3Desc">分析歷史 CDN 前 pDNS、HTTP Host 碰撞與 Favicon SHA-256 特徵指紋。</div>
+            <div class="card-desc" id="txtM3Desc">比對歷史解析紀錄、HTTP 標頭特徵與 Favicon 雜湊，找出 CDN 背後的來源主機。</div>
             <div class="card-actions">
-              <button type="button" class="btn btn-primary" id="btnRunM3" onclick="runStep('m3')">▶ 執行 M3</button>
+              <button type="button" class="btn btn-primary" id="btnRunM3" onclick="runStep('m3')">執行 M3</button>
             </div>
           </div>
 
           <!-- Card M4 -->
           <div class="card">
             <div class="card-header">
-              <span class="card-title" id="txtM4Title">M4 基礎設施關聯轉向分析</span>
+              <span class="card-title" id="txtM4Title">M4 關聯轉向分析</span>
               <span class="card-cmd">ariadns step -m m4</span>
             </div>
-            <div class="card-desc" id="txtM4Desc">透過反向 IP、自建 MX/NS 與共用 Token 轉向，套用 7 日 MISP 誤報清單過濾。</div>
+            <div class="card-desc" id="txtM4Desc">由反向 IP、共用主機或憑證標記向外延伸，並過濾已知停泊清單。</div>
             <div class="card-actions">
-              <button type="button" class="btn btn-primary" id="btnRunM4" onclick="runStep('m4')">▶ 執行 M4</button>
+              <button type="button" class="btn btn-primary" id="btnRunM4" onclick="runStep('m4')">執行 M4</button>
             </div>
           </div>
 
           <!-- Card M7 -->
           <div class="card">
             <div class="card-header">
-              <span class="card-title" id="txtM7Title">M7 手動帶外回連探測 (OOB)</span>
+              <span class="card-title" id="txtM7Title">M7 主動回連驗證</span>
               <span class="card-cmd">ariadns manual-oob</span>
             </div>
-            <div class="card-desc" id="txtM7Desc">隔離主動回連注入，主動驗證目標伺服器基礎設施（需承諾風險）。</div>
+            <div class="card-desc" id="txtM7Desc">向指定端點發送包含自訂監聽位址的請求，確認原始主機連線。</div>
             <div class="card-opsec">
-              <strong id="txtM7OpsecWarning">[OPSEC 安全風險警告]</strong>
-              <span id="txtM7OpsecText">將向外部目標發送真實回連流量。必須明確確認安全風險方可執行。</span>
+              <strong id="txtM7OpsecWarning">主動探測提醒</strong>
+              <span id="txtM7OpsecText">此操作會向外部目標送出網路流量，請先確認已獲得授權。</span>
               <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
                 <input type="checkbox" id="m7AckRisk" onchange="toggleM7Button()">
-                <span id="txtM7OpsecAck">我已知悉 OPSEC 風險並授權執行</span>
+                <span id="txtM7OpsecAck">確認授權並繼續執行</span>
               </label>
             </div>
             <div class="card-actions">
-              <button type="button" id="m7RunBtn" class="btn" disabled onclick="runStep('m7')">▶ 執行 M7</button>
+              <button type="button" id="m7RunBtn" class="btn" disabled onclick="runStep('m7')">執行 M7</button>
             </div>
           </div>
         </div>
@@ -710,26 +717,26 @@
       <!-- Section 2: Next-Step Recommendations -->
       <div>
         <div class="section-title">
-          <span id="txtRecTitle">下一步調查建議</span>
-          <span id="recCount" style="font-family: var(--font-mono); font-size: 12px;">0 項待處理</span>
+          <span id="txtRecTitle">建議下一步</span>
+          <span id="recCount" style="font-family: var(--font-mono); font-size: 12px;">0 項建議</span>
         </div>
         <div id="recContainer" style="display: flex; flex-direction: column; gap: 8px;">
-          <div class="empty-state" id="txtRecEmpty" style="padding: 10px;">目前無待處理的調查建議。請輸入網域並載入案件。</div>
+          <div class="empty-state" id="txtRecEmpty" style="padding: 10px;">目前無待處理的建議項目。輸入網域後即可開始。</div>
         </div>
       </div>
 
       <!-- Section 3: Node Selection & Graph Rendering -->
       <div>
         <div class="section-title">
-          <span id="txtPropTitle">命題節點過濾器</span>
-          <span id="txtPropSubtitle" style="font-size: 12px; text-transform: none; color: var(--text-faint);">勾選以繪入證據架構圖</span>
+          <span id="txtPropTitle">證據節點</span>
+          <span id="txtPropSubtitle" style="font-size: 12px; text-transform: none; color: var(--text-faint);">選擇繪入結構圖的項目</span>
         </div>
         <div class="prop-list" id="propList">
-          <div class="empty-state" id="txtPropEmpty" style="padding: 10px;">請先載入案件以檢視命題節點。</div>
+          <div class="empty-state" id="txtPropEmpty" style="padding: 10px;">請先載入網域以檢視證據節點。</div>
         </div>
         <div style="margin-top: 10px; display: flex; justify-content: flex-end;">
           <button type="button" class="btn btn-accent" id="btnRenderGraph" onclick="renderEvidenceGraph()">
-            ⚙ 生成證據架構圖
+            生成證據結構圖
           </button>
         </div>
       </div>
@@ -741,7 +748,7 @@
       <div class="graph-viewport">
         <div class="graph-toolbar">
           <div class="watermark-pill">
-            <span id="lblWatermark">鑑識資料雜湊 SHA-256:</span>
+            <span id="lblWatermark">結構雜湊 SHA-256:</span>
             <span class="watermark-hash" id="watermarkHash">尚未生成</span>
           </div>
           <div style="display: flex; gap: 8px;">
@@ -751,7 +758,7 @@
         </div>
         <div class="graph-container" id="graphContainer">
           <div class="empty-state" id="graphEmptyState">
-            [ 生成後將於此處顯示靜態不可拖曳的證據結構圖 ]
+            尚未生成證據結構圖。請於左側勾選項目後點擊生成。
           </div>
           <div id="graphImageWrapper" style="display:none;"></div>
         </div>
@@ -760,9 +767,9 @@
       <!-- Tabbed Forensic Matrices -->
       <div class="forensic-panel">
         <div class="panel-tabs">
-          <button type="button" class="tab-btn active" id="tabBtnCustodians" onclick="switchTab('custodians')">資料管理源矩陣</button>
-          <button type="button" class="tab-btn" id="tabBtnAudit" onclick="switchTab('audit')">案件執行稽核軌跡</button>
-          <button type="button" class="tab-btn" id="tabBtnManifest" onclick="switchTab('manifest')">密碼學數位簽章與完整性</button>
+          <button type="button" class="tab-btn active" id="tabBtnCustodians" onclick="switchTab('custodians')">調閱對象清單</button>
+          <button type="button" class="tab-btn" id="tabBtnAudit" onclick="switchTab('audit')">調查步驟歷程</button>
+          <button type="button" class="tab-btn" id="tabBtnManifest" onclick="switchTab('manifest')">檔案完整性驗證</button>
         </div>
 
         <!-- Tab 1: Custodians -->
@@ -772,13 +779,13 @@
               <tr>
                 <th id="thCustConclusionId">結論編號</th>
                 <th id="thCustTargetEntity">目標實體</th>
-                <th id="thCustCustodian">資料管理源</th>
+                <th id="thCustCustodian">資料保管單位</th>
                 <th id="thCustRole">角色</th>
-                <th id="thCustQueryableRecords">可調閱記錄項目</th>
+                <th id="thCustQueryableRecords">可調閱紀錄項目</th>
               </tr>
             </thead>
             <tbody id="custodiansTableBody">
-              <tr><td colspan="5" id="txtNoCustodians" style="text-align:center; color: var(--text-faint);">目前無管理源對應資料。</td></tr>
+              <tr><td colspan="5" id="txtNoCustodians" style="text-align:center; color: var(--text-faint);">目前無調閱對象資料。</td></tr>
             </tbody>
           </table>
         </div>
@@ -789,15 +796,15 @@
             <thead>
               <tr>
                 <th id="thAuditStep">步驟</th>
-                <th id="thAuditTimestamp">時間戳記 (UTC)</th>
+                <th id="thAuditTimestamp">時間戳記 UTC</th>
                 <th id="thAuditModule">模組</th>
-                <th id="thAuditTarget">目標</th>
+                <th id="thAuditTarget">調查目標</th>
                 <th id="thAuditAddedFacts">新增事實</th>
                 <th id="thAuditStateSha">狀態雜湊 SHA-256</th>
               </tr>
             </thead>
             <tbody id="auditTableBody">
-              <tr><td colspan="6" id="txtNoAudit" style="text-align:center; color: var(--text-faint);">無稽核軌跡記錄。</td></tr>
+              <tr><td colspan="6" id="txtNoAudit" style="text-align:center; color: var(--text-faint);">尚無歷程紀錄。</td></tr>
             </tbody>
           </table>
         </div>
@@ -805,19 +812,19 @@
         <!-- Tab 3: Manifest -->
         <div id="tabManifest" class="tab-content" style="display: none;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <span id="txtManifestTitle" style="font-family: var(--font-mono); font-size: 12px;">雙層數位鑑識 Manifest 簽章</span>
+            <span id="txtManifestTitle" style="font-family: var(--font-mono); font-size: 12px;">鑑識檔案雜湊清單</span>
             <button type="button" class="btn" id="btnVerifyIntegrity" onclick="verifyIntegrity()">驗證完整性</button>
           </div>
           <table class="dense-table">
             <thead>
               <tr>
-                <th id="thManFile">產出檔案</th>
+                <th id="thManFile">檔案名稱</th>
                 <th id="thManSha">SHA-256 摘要</th>
                 <th id="thManStatus">驗證狀態</th>
               </tr>
             </thead>
             <tbody id="manifestTableBody">
-              <tr><td colspan="3" id="txtManifestEmpty" style="text-align:center; color: var(--text-faint);">請先生成證據架構圖以檢視簽章清單。</td></tr>
+              <tr><td colspan="3" id="txtManifestEmpty" style="text-align:center; color: var(--text-faint);">請先生成結構圖以取得檔案清單。</td></tr>
             </tbody>
           </table>
         </div>
@@ -829,49 +836,51 @@
   <div id="settingsModal" class="modal-backdrop" style="display: none;">
     <div class="modal-dialog">
       <div class="modal-header">
-        <h3 id="modalTitleText" class="modal-title">偏好與系統設定</h3>
+        <h3 id="modalTitleText" class="modal-title">偏好設定</h3>
         <button type="button" class="modal-close-btn" onclick="closeSettingsModal()">&times;</button>
       </div>
       <div class="modal-body">
         <div class="setting-group">
-          <label id="lblModalLang" class="setting-label">介面語言 (Interface Language)</label>
+          <label id="lblModalLang" class="setting-label">介面語言</label>
           <select id="settingLang" class="setting-select" onchange="onSettingLangChange()">
-            <option value="zh">繁體中文 (Traditional Chinese)</option>
-            <option value="en">English (英文)</option>
+            <option value="zh">繁體中文</option>
+            <option value="en">English</option>
           </select>
         </div>
 
         <div class="setting-group">
-          <label id="lblModalFormat" class="setting-label">預設圖形格式 (Default Graph Format)</label>
+          <label id="lblModalFormat" class="setting-label">預設圖形格式</label>
           <select id="settingFormat" class="setting-select">
-            <option value="svg" id="optFormatSvg">SVG (向量圖形，清晰無損)</option>
-            <option value="png" id="optFormatPng">PNG (點陣圖形，便於嵌入簡報)</option>
+            <option value="svg" id="optFormatSvg">SVG</option>
+            <option value="png" id="optFormatPng">PNG</option>
           </select>
+          <span class="setting-hint" id="hintModalFormat">SVG 適合無損縮放檢視；PNG 適合直接貼入報告。</span>
         </div>
 
         <div class="setting-group">
-          <label id="lblModalDepth" class="setting-label">預設探索遞迴深度 (Recursion Depth)</label>
+          <label id="lblModalDepth" class="setting-label">探索遞迴深度</label>
           <select id="settingDepth" class="setting-select">
-            <option value="1" id="optDepth1">深度 1 (目標網域及直連實體)</option>
-            <option value="2" id="optDepth2">深度 2 (向外延伸兩層轉向關聯)</option>
+            <option value="1" id="optDepth1">深度 1</option>
+            <option value="2" id="optDepth2">深度 2</option>
           </select>
+          <span class="setting-hint" id="hintModalDepth">深度 1 僅調查目標與直連實體；深度 2 額外向外擴展兩層關聯。</span>
         </div>
 
         <div class="setting-group">
-          <label id="lblModalMisp" class="setting-label">MISP 誤報過濾清單快取</label>
+          <label id="lblModalMisp" class="setting-label">公開誤報與停泊清單</label>
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
             <span id="mispCacheStatus" style="font-family: var(--font-mono); font-size: 12px; color: var(--text-muted);">
-              MISP 7D SYNC: ACTIVE
+              誤報清單: 已同步
             </span>
             <button type="button" class="btn" id="btnSyncMisp" onclick="syncWarninglistsNow()">
-              立即強制同步清單
+              立即同步清單
             </button>
           </div>
         </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-primary" id="btnSaveSettings" onclick="saveSettingsModal()">
-          關閉並套用
+          儲存並套用
         </button>
       </div>
     </div>
@@ -882,108 +891,110 @@
     const TRANSLATIONS = {
       zh: {
         brandTitle: "Ariadns 鑑識工作台",
-        domainPlaceholder: "請輸入目標網域 (例如 target.com)...",
+        domainPlaceholder: "輸入目標網域，如 example.com",
         loadSession: "載入案件",
         indicatorModule: "模組:",
         indicatorTarget: "目標:",
         indicatorStatus: "狀態:",
         indicatorElapsed: "耗時:",
-        mispSyncActive: "MISP 7日同步: 啟用",
-        mispSyncIdle: "MISP 7日同步: 閒置",
+        mispSyncActive: "誤報清單: 已同步",
+        mispSyncIdle: "誤報清單: 未同步",
         langBtn: "🌐 繁體中文",
         settingsBtn: "⚙ 偏好設定",
 
         // Command Cards
-        cmdCardsTitle: "視覺化 CLI 模組卡片",
-        m1Title: "M1 本地 DNS 與拓撲分析",
-        m1Desc: "探測權威 NS、MX、SOA 電子郵件、TXT 驗證標記與 A/AAAA IP 拓撲結構。",
-        m1Btn: "▶ 執行 M1",
+        cmdCardsTitle: "調查模組",
+        m1Title: "M1 DNS 與網路關聯",
+        m1Desc: "查詢權威 NS、MX、SOA 聯絡資訊、TXT 驗證紀錄與 A、AAAA 位址。",
+        m1Btn: "執行 M1",
         m2Title: "M2 子網域列舉",
-        m2Desc: "透過憑證透明度日誌 (CT Logs) 與字典列舉探索關聯子網域。",
-        m2Btn: "▶ 執行 M2",
-        m3Title: "M3 候選真實原始伺服器偵測",
-        m3Desc: "分析歷史 CDN 前 pDNS、HTTP Host 碰撞與 Favicon SHA-256 特徵指紋。",
-        m3Btn: "▶ 執行 M3",
-        m4Title: "M4 基礎設施關聯轉向分析",
-        m4Desc: "透過反向 IP、自建 MX/NS 與共用 Token 轉向，套用 7 日 MISP 誤報清單過濾。",
-        m4Btn: "▶ 執行 M4",
-        m7Title: "M7 手動帶外回連探測 (OOB)",
-        m7Desc: "隔離主動回連注入，主動驗證目標伺服器基礎設施（需承諾風險）。",
-        m7OpsecWarning: "[OPSEC 安全風險警告]",
-        m7OpsecText: "將向外部目標發送真實回連流量。必須明確確認安全風險方可執行。",
-        m7OpsecAck: "我已知悉 OPSEC 風險並授權執行",
-        m7Btn: "▶ 執行 M7",
+        m2Desc: "比對憑證透明度紀錄與字典清單，搜集關聯子網域。",
+        m2Btn: "執行 M2",
+        m3Title: "M3 真實伺服器探測",
+        m3Desc: "比對歷史解析紀錄、HTTP 標頭特徵與 Favicon 雜湊，找出 CDN 背後的來源主機。",
+        m3Btn: "執行 M3",
+        m4Title: "M4 關聯轉向分析",
+        m4Desc: "由反向 IP、共用主機或憑證標記向外延伸，並過濾已知停泊清單。",
+        m4Btn: "執行 M4",
+        m7Title: "M7 主動回連驗證",
+        m7Desc: "向指定端點發送包含自訂監聽位址的請求，確認原始主機連線。",
+        m7OpsecWarning: "主動探測提醒",
+        m7OpsecText: "此操作會向外部目標送出網路流量，請先確認已獲得授權。",
+        m7OpsecAck: "確認授權並繼續執行",
+        m7Btn: "執行 M7",
 
         // Recommendations
-        recTitle: "下一步調查建議",
-        recActive: "項待處理",
-        recEmpty: "目前無待處理的調查建議。請輸入網域並載入案件。",
+        recTitle: "建議下一步",
+        recActive: "項建議",
+        recEmpty: "目前無待處理的建議項目。輸入網域後即可開始。",
         recApplyBtn: "套用並執行",
 
         // Proposition Filter
-        propTitle: "命題節點過濾器",
-        propSubtitle: "勾選以繪入證據架構圖",
-        propEmpty: "請先載入案件以檢視命題節點。",
-        propNoRecorded: "尚未記錄任何命題。請執行任一模組開始調查。",
-        btnRenderGraph: "⚙ 生成證據架構圖",
+        propTitle: "證據節點",
+        propSubtitle: "選擇繪入結構圖的項目",
+        propEmpty: "請先載入網域以檢視證據節點。",
+        propNoRecorded: "尚無證據節點。請先執行任一調查模組。",
+        btnRenderGraph: "生成證據結構圖",
 
         // Graph Viewport
-        watermarkLabel: "鑑識資料雜湊 SHA-256:",
+        watermarkLabel: "結構雜湊 SHA-256:",
         watermarkNotRendered: "尚未生成",
         formatPrefix: "格式: ",
         btnExport: "匯出圖檔",
-        graphEmpty: "[ 生成後將於此處顯示靜態不可拖曳的證據結構圖 ]",
+        graphEmpty: "尚未生成證據結構圖。請於左側勾選項目後點擊生成。",
 
         // Forensic Panel Tabs
-        tabCustodians: "資料管理源矩陣",
-        tabAudit: "案件執行稽核軌跡",
-        tabManifest: "密碼學數位簽章與完整性",
+        tabCustodians: "調閱對象清單",
+        tabAudit: "調查步驟歷程",
+        tabManifest: "檔案完整性驗證",
 
         // Table Headers
         thConclusionId: "結論編號",
         thTargetEntity: "目標實體",
-        thCustodian: "資料管理源",
+        thCustodian: "資料保管單位",
         thRole: "角色",
-        thQueryableRecords: "可調閱記錄項目",
-        noCustodians: "目前無管理源對應資料。",
+        thQueryableRecords: "可調閱紀錄項目",
+        noCustodians: "目前無調閱對象資料。",
 
         thStep: "步驟",
-        thTimestamp: "時間戳記 (UTC)",
+        thTimestamp: "時間戳記 UTC",
         thModule: "模組",
-        thTarget: "目標",
+        thTarget: "調查目標",
         thAddedFacts: "新增事實",
         thStateSha: "狀態雜湊 SHA-256",
-        noAudit: "無稽核軌跡記錄。",
+        noAudit: "尚無歷程紀錄。",
 
-        manifestTitle: "雙層數位鑑識 Manifest 簽章",
+        manifestTitle: "鑑識檔案雜湊清單",
         btnVerify: "驗證完整性",
-        thFile: "產出檔案",
+        thFile: "檔案名稱",
         thSha: "SHA-256 摘要",
         thVerifyStatus: "驗證狀態",
-        manifestEmpty: "請先生成證據架構圖以檢視簽章清單。",
-        bitMatch: "逐位元完全相符",
+        manifestEmpty: "請先生成結構圖以取得檔案清單。",
+        bitMatch: "已驗證",
 
         // Settings Modal
-        modalTitle: "偏好與系統設定",
-        modalLangLabel: "介面語言 (Interface Language)",
-        modalFormatLabel: "預設圖形格式 (Default Graph Format)",
-        optFormatSvg: "SVG (向量圖形，清晰無損)",
-        optFormatPng: "PNG (點陣圖形，便於嵌入簡報)",
-        modalDepthLabel: "預設探索遞迴深度 (Recursion Depth)",
-        modalDepth1: "深度 1 (目標網域及直連實體)",
-        modalDepth2: "深度 2 (向外延伸兩層轉向關聯)",
-        modalMispLabel: "MISP 誤報過濾清單快取",
-        btnForceSync: "立即強制同步清單",
+        modalTitle: "偏好設定",
+        modalLangLabel: "介面語言",
+        modalFormatLabel: "預設圖形格式",
+        optFormatSvg: "SVG",
+        optFormatPng: "PNG",
+        hintFormat: "SVG 適合無損縮放檢視；PNG 適合直接貼入報告。",
+        modalDepthLabel: "探索遞迴深度",
+        optDepth1: "深度 1",
+        optDepth2: "深度 2",
+        hintDepth: "深度 1 僅調查目標與直連實體；深度 2 額外向外擴展兩層關聯。",
+        modalMispLabel: "公開誤報與停泊清單",
+        btnForceSync: "立即同步清單",
         syncingText: "同步中...",
-        syncSuccessText: "同步成功！",
-        syncFailedText: "同步失敗。",
-        btnCloseSettings: "關閉並套用",
+        syncSuccessText: "同步成功",
+        syncFailedText: "同步失敗",
+        btnCloseSettings: "儲存並套用",
 
         // Alerts & Status
-        verifyPassed: "完整性驗證結果：通過 (100% 密碼學雜湊完全吻合)",
-        verifyFailed: "完整性驗證結果：失敗",
-        verifyError: "驗證執行發生錯誤。",
-        enterDomainAlert: "請先輸入目標網域並載入案件。",
+        verifyPassed: "驗證通過：所有產出檔案雜湊完全吻合。",
+        verifyFailed: "驗證失敗：部分檔案雜湊與清單不符。",
+        verifyError: "執行驗證時發生錯誤。",
+        enterDomainAlert: "請先輸入目標網域。",
         renderingStatus: "生成中",
         doneStatus: "完成",
         readyStatus: "就緒",
@@ -993,7 +1004,7 @@
       },
       en: {
         brandTitle: "Ariadns Forensic Workbench",
-        domainPlaceholder: "Enter target domain (e.g. target.com)...",
+        domainPlaceholder: "Enter target domain, e.g. example.com",
         loadSession: "Load Session",
         indicatorModule: "MODULE:",
         indicatorTarget: "TARGET:",
@@ -1008,22 +1019,22 @@
         cmdCardsTitle: "Visual CLI Command Cards",
         m1Title: "M1 Local DNS & Topology",
         m1Desc: "Probe authoritative NS, MX, SOA email, TXT verification tokens, and A/AAAA IPs.",
-        m1Btn: "▶ Run M1",
+        m1Btn: "Run M1",
         m2Title: "M2 Subdomain Enumeration",
         m2Desc: "Passive certificate transparency logs and DNS wordlists to uncover subdomains.",
-        m2Btn: "▶ Run M2",
+        m2Btn: "Run M2",
         m3Title: "M3 Candidate Origin Detection",
         m3Desc: "Historical pre-CDN pDNS, HTTP Host collision, and Favicon SHA-256 fingerprinting.",
-        m3Btn: "▶ Run M3",
+        m3Btn: "Run M3",
         m4Title: "M4 Infrastructure Pivoting",
         m4Desc: "Reverse IP, custom MX/NS, and shared token pivoting with 7-day warninglist filtering.",
-        m4Btn: "▶ Run M4",
+        m4Btn: "Run M4",
         m7Title: "M7 Manual OOB Callback Probe",
         m7Desc: "Isolated active callback injection to verify origin infrastructure.",
-        m7OpsecWarning: "[OPSEC RISK WARNING]",
-        m7OpsecText: "Generates live outbound callback traffic to external target. Requires explicit risk acknowledgement.",
-        m7OpsecAck: "Acknowledge OPSEC risk to proceed",
-        m7Btn: "▶ Run M7",
+        m7OpsecWarning: "Active Probe Advisory",
+        m7OpsecText: "Generates live outbound callback traffic to external target. Requires explicit authorization.",
+        m7OpsecAck: "Confirm authorization and proceed",
+        m7Btn: "Run M7",
 
         // Recommendations
         recTitle: "Next-Step Recommendations",
@@ -1033,17 +1044,17 @@
 
         // Proposition Filter
         propTitle: "Proposition Filter",
-        propSubtitle: "Check to render in graph",
+        propSubtitle: "Select items to render into architecture graph",
         propEmpty: "Load a session to view propositions.",
-        propNoRecorded: "No propositions recorded. Run a step to begin.",
-        btnRenderGraph: "⚙ Generate Evidence Architecture Graph",
+        propNoRecorded: "No propositions recorded. Run an investigation module to begin.",
+        btnRenderGraph: "Generate Evidence Graph",
 
         // Graph Viewport
         watermarkLabel: "FORENSIC PAYLOAD SHA-256:",
         watermarkNotRendered: "NOT_RENDERED",
         formatPrefix: "Format: ",
         btnExport: "Export",
-        graphEmpty: "[ Static non-draggable evidence graph will display here upon generation ]",
+        graphEmpty: "No evidence graph generated yet. Select items and click generate.",
 
         // Forensic Panel Tabs
         tabCustodians: "Data Custodians Matrix",
@@ -1059,7 +1070,7 @@
         noCustodians: "No custodian mappings available.",
 
         thStep: "Step",
-        thTimestamp: "Timestamp (UTC)",
+        thTimestamp: "Timestamp UTC",
         thModule: "Module",
         thTarget: "Target",
         thAddedFacts: "Added Facts",
@@ -1072,23 +1083,25 @@
         thSha: "SHA-256 Digest",
         thVerifyStatus: "Verification Status",
         manifestEmpty: "Generate graph to inspect manifest.",
-        bitMatch: "BIT-FOR-BIT MATCH",
+        bitMatch: "VERIFIED",
 
         // Settings Modal
-        modalTitle: "Preferences & System Settings",
+        modalTitle: "Preferences",
         modalLangLabel: "Interface Language",
         modalFormatLabel: "Default Graph Format",
-        optFormatSvg: "SVG (Vector, lossless precision)",
-        optFormatPng: "PNG (Raster, portable presentation)",
-        modalDepthLabel: "Default Recursion Depth",
-        modalDepth1: "Depth 1 (Direct Domain & Adjacent)",
-        modalDepth2: "Depth 2 (Two-hop Pivot Expansion)",
-        modalMispLabel: "MISP Warninglist Cache",
-        btnForceSync: "Force Sync Now",
+        optFormatSvg: "SVG",
+        optFormatPng: "PNG",
+        hintFormat: "SVG is ideal for lossless zooming; PNG is suitable for pasting into reports.",
+        modalDepthLabel: "Exploration Depth",
+        optDepth1: "Depth 1",
+        optDepth2: "Depth 2",
+        hintDepth: "Depth 1 inspects direct entities; Depth 2 expands pivots outward by two hops.",
+        modalMispLabel: "Public Warninglists & Parking Feeds",
+        btnForceSync: "Sync Lists Now",
         syncingText: "Syncing...",
-        syncSuccessText: "Synced successfully!",
-        syncFailedText: "Sync failed.",
-        btnCloseSettings: "Close & Apply",
+        syncSuccessText: "Sync Succeeded",
+        syncFailedText: "Sync Failed",
+        btnCloseSettings: "Save & Apply",
 
         // Alerts & Status
         verifyPassed: "Verification Result: PASSED (100% Cryptographic Match)",
@@ -1225,9 +1238,11 @@
       document.getElementById("lblModalFormat").textContent = t.modalFormatLabel;
       document.getElementById("optFormatSvg").textContent = t.optFormatSvg;
       document.getElementById("optFormatPng").textContent = t.optFormatPng;
+      document.getElementById("hintModalFormat").textContent = t.hintFormat;
       document.getElementById("lblModalDepth").textContent = t.modalDepthLabel;
-      document.getElementById("optDepth1").textContent = t.modalDepth1;
-      document.getElementById("optDepth2").textContent = t.modalDepth2;
+      document.getElementById("optDepth1").textContent = t.optDepth1;
+      document.getElementById("optDepth2").textContent = t.optDepth2;
+      document.getElementById("hintModalDepth").textContent = t.hintDepth;
       document.getElementById("lblModalMisp").textContent = t.modalMispLabel;
       document.getElementById("btnSyncMisp").textContent = t.btnForceSync;
       document.getElementById("btnSaveSettings").textContent = t.btnCloseSettings;
