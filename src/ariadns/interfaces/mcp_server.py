@@ -31,7 +31,8 @@ def get_orchestrator() -> Orchestrator:
 def osint_scan(
     domain: str,
     depth: int = 1,
-    run_portscan: bool = False
+    run_portscan: bool = False,
+    mode: str = 'full'
 ) -> dict[str, Any]:
     """Execute domain OSINT recon pipeline (M1-M5) returning a compact, token-economic summary (<600 tokens)."""
     orchestrator = get_orchestrator()
@@ -39,6 +40,10 @@ def osint_scan(
     res = orchestrator.run_investigation(clean_domain, depth=depth, run_portscan=run_portscan)
 
     return {
+        'status': 'COMPLETED',
+        'target_domain': clean_domain,
+        'current_ip': res.infrastructure.current_ip,
+        'verification_tokens': res.identity_profile.verification_tokens,
         "domain": clean_domain,
         "resolved_ip": res.infrastructure.current_ip,
         "is_cdn": res.infrastructure.is_cdn,
