@@ -1,67 +1,57 @@
-"""Ariadns FastMCP Server for Agentic Access."""
+"""FastMCP Server Interface for Ariadns (Token-Economic OSINT Tools & Resources)."""
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 try:
-    from mcp.server.mcpserver import MCPServer as FastMCP
-except ImportError:
     from mcp.server.fastmcp import FastMCP
-
+except ModuleNotFoundError:
+    from mcp.server.mcpserver import MCPServer as FastMCP
 from ariadns.models.config import AppConfig
-from ariadns.models.enums import NodeType
+from ariadns.models.enums import ConfidenceLevel, NodeType
 from ariadns.modules.m5_orchestrator import Orchestrator
-from ariadns.modules.m6_reporting import ReportingEngine
+from ariadns.modules.m6_reporting import ReportingEngine, render_evidence_artifacts
 from ariadns.modules.m7_manual_oob import trigger_manual_oob
-from ariadns.storage.db import DatabaseManager
+from ariadns.modules.m8_recommender import NextStepRecommender
+from ariadns.storage.forensic_verifier import verify_case_artifacts
 from ariadns.storage.graph_store import PropertyGraphStore
+from ariadns.utils.warninglist_sync import WarninglistSynchronizer
 
 mcp = FastMCP("ariadns-mcp")
 
+_orchestrator: Orchestrator | None = None
+
 def get_orchestrator() -> Orchestrator:
-    config = AppConfig.load()
-    db = DatabaseManager(config.db_path)
-    return Orchestrator(config=config, db=db)
+    global _orchestrator
+    if _orchestrator is None:
+        _orchestrator = Orchestrator()
+    return _orchestrator
 
 @mcp.tool()
 def osint_scan(
     domain: str,
-    mode: str = "full",
     depth: int = 1,
-    portscan: bool = False
+    run_portscan: bool = False
 ) -> dict[str, Any]:
-    """Execute domain OSINT scan. Saves full details in SQLite and returns a compact digest (<= 600 tokens)."""
+    """Execute domain OSINT recon pipeline (M1-M5) returning a compact, token-economic summary (<600 tokens)."""
     orchestrator = get_orchestrator()
     clean_domain = domain.strip().lower()
-    result = orchestrator.run_investigation(
-        domain=clean_domain,
-        depth=depth,
-        run_portscan=portscan
-    )
-
-    infra = result.infrastructure
-    id_prof = result.identity_profile
+    res = orchestrator.run_investigation(clean_domain, depth=depth, run_portscan=run_portscan)
 
     return {
-        "status": "COMPLETED",
-        "target_domain": clean_domain,
-        "current_ip": infra.current_ip,
-        "is_cdn": infra.is_cdn,
-        "cdn_provider": infra.cdn_provider,
-        "asn_org_name": infra.asn_org_name,
-        "registrar_name": id_prof.registrar_name,
-        "suspected_origin_ip": infra.suspected_origin_ip,
-        "origin_verification_status": infra.origin_verification_status,
-        "server_banner": infra.server_banner,
-        "soa_admin_email": id_prof.soa_admin_email,
-        "verification_tokens": id_prof.verification_tokens,
-        "html_tracking_tokens": id_prof.html_tracking_tokens,
-        "subdomains_count": len(result.subdomains),
-        "l2_domains_count": len(result.l2_recursive_results),
-        "evidence_propositions_count": len(result.evidence_chain),
-        "top_l2_candidates": [
-            {"domain": l2.domain, "relation": l2.relation_type, "confidence": l2.confidence}
-            for l2 in result.l2_recursive_results[:10]
+        "domain": clean_domain,
+        "resolved_ip": res.infrastructure.current_ip,
+        "is_cdn": res.infrastructure.is_cdn,
+        "cdn_provider": res.infrastructure.cdn_provider,
+        "suspected_origin_ip": res.infrastructure.suspected_origin_ip,
+        "origin_status": res.infrastructure.origin_verification_status,
+        "registrar": res.identity_profile.registrar_name,
+        "subdomains_count": len(res.subdomains),
+        "l2_pivots_count": len(res.l2_recursive_results),
+        "high_confidence_pivots": [
+            {"domain": l2.domain, "relation": l2.relation_type}
+            for l2 in res.l2_recursive_results
+            if l2.confidence == ConfidenceLevel.HIGH.value
         ],
     }
 
@@ -73,7 +63,7 @@ def osint_inspect(
     sql_query: str = "",
     limit: int = 20
 ) -> dict[str, Any]:
-    """Inspect investigation graph details, evidence chain, custodians, or execute guarded read-only SELECT SQL."""
+    """Inspect investigation graph details, normalized evidence chain, custodians, or execute guarded read-only SELECT SQL."""
     orchestrator = get_orchestrator()
     clean_domain = domain.strip().lower()
     store = PropertyGraphStore(orchestrator.db, session_id=clean_domain)
@@ -88,10 +78,10 @@ def osint_inspect(
             return {"error": str(e)}
 
     elif query_type == "evidence_chain":
-        # Load from session result
-        cached = orchestrator.db.get_dns_cache(clean_domain, "A")
-        # Run lightweight investigation if not present
-        res = orchestrator.run_investigation(clean_domain, depth=1)
+        rendered_props = orchestrator.db.get_normalized_propositions(clean_domain, rendered_only=True)
+        if not rendered_props:
+            res = orchestrator.run_investigation(clean_domain, depth=1)
+            rendered_props = res.evidence_chain
         propositions = [
             {
                 "prop_id": p.prop_id,
@@ -103,25 +93,26 @@ def osint_inspect(
                 "target_entity": p.target_entity,
                 "entity_type": p.entity_type,
             }
-            for p in res.evidence_chain[:limit]
+            for p in rendered_props[:limit]
         ]
         return {"session_id": clean_domain, "evidence_chain": propositions}
 
     elif query_type == "custodians":
-        res = orchestrator.run_investigation(clean_domain, depth=1)
-        custodian_matrix = []
-        for p in res.evidence_chain:
-            if p.node_kind == "CONCLUSION" and p.custodians:
-                for c in p.custodians:
-                    custodian_matrix.append({
-                        "conclusion_id": p.prop_id,
-                        "target_entity": p.target_entity,
-                        "entity_type": p.entity_type,
-                        "custodian_name": c.custodian_name,
-                        "custodian_role": c.custodian_role,
-                        "queryable_records": c.queryable_records,
-                    })
-        return {"session_id": clean_domain, "custodians": custodian_matrix[:limit]}
+        custodians = orchestrator.db.get_normalized_custodians(clean_domain)
+        if not custodians:
+            res = orchestrator.run_investigation(clean_domain, depth=1)
+            for p in res.evidence_chain:
+                if p.node_kind == "CONCLUSION" and p.custodians:
+                    for c in p.custodians:
+                        custodians.append({
+                            "conclusion_id": p.prop_id,
+                            "target_entity": p.target_entity,
+                            "entity_type": p.entity_type,
+                            "custodian_name": c.custodian_name,
+                            "custodian_role": c.custodian_role,
+                            "queryable_records": c.queryable_records,
+                        })
+        return {"session_id": clean_domain, "custodians": custodians[:limit]}
 
     elif query_type == "neighbors":
         if not target_node:
@@ -139,44 +130,171 @@ def osint_inspect(
 
     elif query_type == "l2_candidates":
         l2_nodes = [
-            n for n, d in store.graph.nodes(data=True)
-            if d.get("node_type") == NodeType.DOMAIN_L2.value
+            {"id": n, "label": store.graph.nodes[n].get("label")}
+            for n in store.graph.nodes
+            if store.graph.nodes[n].get("node_type") == NodeType.DOMAIN_L2.value
         ]
-        candidates = []
-        for n in l2_nodes:
-            lbl = store.graph.nodes[n].get("label", n)
-            score, conf = store.score_l2_domain(clean_domain, lbl)
-            candidates.append({"domain": lbl, "score": score, "confidence": conf})
-        return {"l2_candidates": sorted(candidates, key=lambda x: x["score"], reverse=True)[:limit]}
+        return {"session_id": clean_domain, "l2_candidates": l2_nodes[:limit]}
 
-    else:
+    elif query_type == "summary":
         return {
             "session_id": clean_domain,
             "total_nodes": store.graph.number_of_nodes(),
             "total_edges": store.graph.number_of_edges(),
+            "origin_node": f"{NodeType.DOMAIN_L1.value}:{clean_domain}",
         }
+
+    return {"error": f"Unknown query_type: '{query_type}'"}
+
+@mcp.tool()
+def osint_run_step(
+    domain: str,
+    module_name: str,
+    target: str = "",
+    params_json: str = "{}"
+) -> dict[str, Any]:
+    """Execute a single investigation module stepwise against a case session, merging facts and logging audit trail."""
+    orchestrator = get_orchestrator()
+    clean_domain = domain.strip().lower()
+    step_target = (target or clean_domain).strip().lower()
+    params = json.loads(params_json) if params_json else {}
+
+    entry = orchestrator.run_step(clean_domain, module_name, step_target, params=params)
+    return {
+        "status": "STEP_COMPLETED",
+        "session_id": clean_domain,
+        "step_seq": entry.step_seq,
+        "module_name": entry.module_name,
+        "target": entry.target,
+        "added_fact_ids": entry.added_fact_ids,
+        "artifact_sha256": entry.artifact_sha256,
+    }
+
+@mcp.tool()
+def osint_recommend_next(domain: str) -> dict[str, Any]:
+    """Derive prioritized next-step investigative action recommendations based on known session propositions and history."""
+    orchestrator = get_orchestrator()
+    clean_domain = domain.strip().lower()
+    recommender = NextStepRecommender(orchestrator.db, orchestrator.config)
+    recs = recommender.recommend(clean_domain)
+
+    return {
+        "session_id": clean_domain,
+        "recommendations": [
+            {
+                "rec_id": r.rec_id,
+                "trigger_fact_ids": r.trigger_fact_ids,
+                "recommended_module": r.recommended_module,
+                "recommended_target": r.recommended_target,
+                "rationale": r.rationale,
+                "expected_evidence": r.expected_evidence,
+                "cli_command": r.cli_command,
+            }
+            for r in recs
+        ]
+    }
+
+@mcp.tool()
+def osint_render_graph(
+    domain: str,
+    output_dir: str = "./reports",
+    selected_prop_ids: Optional[list[str]] = None
+) -> dict[str, Any]:
+    """Render non-draggable static SVG/PNG evidence DAG and forensic manifest on disk."""
+    orchestrator = get_orchestrator()
+    clean_domain = domain.strip().lower()
+    svg_path, png_path, md_path, manifest = render_evidence_artifacts(
+        session_id=clean_domain,
+        db=orchestrator.db,
+        output_dir=output_dir,
+        selected_prop_ids=selected_prop_ids
+    )
+
+    return {
+        "status": "OK",
+        "session_id": clean_domain,
+        "svg_path": str(svg_path.resolve()),
+        "png_path": str(png_path.resolve()),
+        "report_md": str(md_path.resolve()),
+        "payload_sha256": manifest.payload_sha256,
+        "rendered_nodes_count": len(manifest.rendered_prop_ids),
+        "excluded_nodes_count": len(manifest.excluded_prop_ids),
+    }
+
+@mcp.tool()
+def osint_read_evidence_graph(
+    session_id: str,
+    rendered_only: bool = True
+) -> dict[str, Any]:
+    """Read the structured evidence graph and audit trail from SQLite without re-running scans (<500 tokens)."""
+    orchestrator = get_orchestrator()
+    clean_session = session_id.strip().lower()
+    props = orchestrator.db.get_normalized_propositions(clean_session, rendered_only=rendered_only)
+    edges = orchestrator.db.get_normalized_edges(clean_session)
+    prop_ids = {p.prop_id for p in props}
+    filtered_edges = [[u, v] for u, v in edges if u in prop_ids and v in prop_ids]
+    logs = orchestrator.db.get_audit_logs(clean_session)
+
+    return {
+        "session_id": clean_session,
+        "propositions": [
+            {
+                "prop_id": p.prop_id,
+                "node_kind": p.node_kind,
+                "rank": p.rank,
+                "statement": p.statement,
+                "premises": p.premises,
+                "is_rendered": p.is_rendered,
+            }
+            for p in props
+        ],
+        "edges": filtered_edges,
+        "audit_logs": [
+            {
+                "step": l.step_seq,
+                "module": l.module_name,
+                "target": l.target,
+                "added_facts": l.added_fact_ids,
+            }
+            for l in logs
+        ]
+    }
+
+@mcp.tool()
+def osint_verify_case(case_dir: str) -> dict[str, Any]:
+    """Verify dual-layer cryptographic integrity (File SHA-256 + Canonical Payload Hash) of a case artifacts directory."""
+    orchestrator = get_orchestrator()
+    return verify_case_artifacts(case_dir, db=orchestrator.db)
+
+@mcp.tool()
+def osint_sync_lists(force: bool = False) -> dict[str, Any]:
+    """Synchronize open-source false-positive warninglists (MISP and Freemail feeds) into local SQLite."""
+    orchestrator = get_orchestrator()
+    syncer = WarninglistSynchronizer(orchestrator.db, orchestrator.http_client, orchestrator.config)
+    status = syncer.ensure_warninglists_synced(force=force)
+    last_synced = orchestrator.db.get_warninglist_last_synced()
+    return {
+        "status": status.value,
+        "last_synced_at": last_synced,
+    }
 
 @mcp.tool()
 def osint_expand(
     parent_domain: str,
     l2_domain: str,
-    modules: list[str] | None = None
+    run_portscan: bool = False
 ) -> dict[str, Any]:
-    """Execute on-demand deep probing on a specific L2 domain and merge results into the session graph."""
+    """Expand and deeply investigate an associated L2 domain candidate discovered during pivoting."""
     orchestrator = get_orchestrator()
     clean_parent = parent_domain.strip().lower()
     clean_l2 = l2_domain.strip().lower()
 
-    l2_result = orchestrator.run_investigation(domain=clean_l2, depth=1)
+    store = PropertyGraphStore(orchestrator.db, session_id=clean_parent)
+    l2_node_id = f"{NodeType.DOMAIN_L2.value}:{clean_l2}"
+    if not store.graph.has_node(l2_node_id):
+        return {"error": f"L2 domain '{clean_l2}' is not an associated candidate in session '{clean_parent}'."}
 
-    parent_store = PropertyGraphStore(orchestrator.db, session_id=clean_parent)
-    l2_store = PropertyGraphStore(orchestrator.db, session_id=clean_l2)
-
-    for n_id, data in l2_store.graph.nodes(data=True):
-        parent_store.add_node(data.get("node_type", "UNKNOWN"), data.get("label", n_id))
-
-    for u, v, data in l2_store.graph.edges(data=True):
-        parent_store.add_edge(u, v, data.get("relation_type", "RELATED"), weight=data.get("weight", 0.5))
+    l2_result = orchestrator.run_investigation(clean_l2, depth=1, run_portscan=run_portscan)
 
     return {
         "status": "EXPANDED",
