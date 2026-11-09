@@ -1,5 +1,10 @@
-# Ariadns v2.0: Automated Domain OSINT & Pivoting Engine
+# Ariadns v1.0.0: Automated Domain OSINT & Pivoting Engine
 
+> **版本命名邏輯 (Semantic Versioning)**：`vX.Y.Z`（當前定調：`v1.0.0`）
+> - **X (Major)**：大型更新、底層資料庫或整體架構重大改動。
+> - **Y (Minor)**：主要功能的調整、新增模組或介面增修。
+> - **Z (Patch)**：Bugfix 缺陷修復、相容性優化。
+>
 > **Ariadns** 是一套輕量、模組化且「本地優先（Local-First）」的網域開源情報（OSINT）探測、因果證據鏈推理與法規調閱矩陣分析系統。
 > 提供 **三端對等介面（Tri-Parity Interfaces）**：人類命令列（CLI）、互動式 REPL、本機高密度視覺工作台（Local Web UI），以及專為 AI Agent 設計的 Model Context Protocol（FastMCP）伺服器。
 > 內建 4 張 SQLite 正規化因果證據表、7 天 MISP 誤報特徵懶加載同步、純 Python 靜態雙格式圖譜渲染（附密碼學浮水印），以及雙層位元級 SHA-256 完整性校驗工具。
@@ -245,7 +250,13 @@ Ariadns 內建遵循 Model Context Protocol（MCP）標準的 stdio 伺服器，
 
 ## 1. Overview & Key Capabilities
 
-**Ariadns v2.0** is a modular, high-density, **local-first** domain OSINT and forensic investigation framework. It provides **Tri-Parity Interfaces** across CLI, local Web UI, and FastMCP for AI agents.
+**Ariadns v1.0.0** is a modular, high-density, **local-first** domain OSINT and forensic investigation framework. It provides **Tri-Parity Interfaces** across CLI, local Web UI, and FastMCP for AI agents.
+
+### Versioning Logic (Semantic Versioning)
+Ariadns adheres to Semantic Versioning (`vX.Y.Z`):
+- **X (Major)**: Major architectural overhauls, database schema migrations, and breaking changes.
+- **Y (Minor)**: New primary capabilities, module additions, or interface updates.
+- **Z (Patch)**: Bug fixes, minor adjustments, and dependency patches.
 
 ### Core Highlights:
 - **Tri-Interface Parity**: Every capability is accessible via CLI, FastMCP server, and Local Web UI.
