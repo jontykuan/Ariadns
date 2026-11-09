@@ -7,7 +7,7 @@ import yaml
 DEFAULT_MX_BLACKLIST = [
     "google.com", "googlemail.com", "outlook.com", "protection.outlook.com",
     "pphosted.com", "mimecast.com", "zoho.com", "yahoodns.net",
-    "icloud.com", "protonmail.ch", "secureserver.net"
+    "icloud.com", "protonmail.ch", "secureserver.net", "privateemail.com", "titan.email", "yandex.net", "mailgun.org", "sendgrid.net"
 ]
 
 DEFAULT_NS_BLACKLIST = [

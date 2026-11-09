@@ -10,3 +10,5 @@ reports/
 *.sqlite
 config.yaml
 .worktrees/
+.cursor/
+.gemini/

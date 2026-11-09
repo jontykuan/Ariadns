@@ -27,6 +27,11 @@ blacklists:
     - "icloud.com"
     - "protonmail.ch"
     - "secureserver.net"
+    - "privateemail.com"
+    - "titan.email"
+    - "yandex.net"
+    - "mailgun.org"
+    - "sendgrid.net"
   ns:
     - "cloudflare.com"
     - "domaincontrol.com"
