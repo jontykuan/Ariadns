@@ -115,10 +115,58 @@ ariadns repl
 - `help` / `exit`：查看說明或退出。
 
 ### 3. 輸出報告說明
-執行完畢後，預設於指定目錄（如 `./reports/`）產出三項標準檔案：
+執行完畢後，預設於指定目錄（如 `./reports/`）產出標準鑑識檔案：
 1. `<domain>_result.json`：符合 SRS Section 5.2 規範之純資料結構。
 2. `<domain>_topology.json`：Cytoscape.js 與 D3.js 相容之節點/關聯邊拓撲圖檔案。
-3. `<domain>_report.md`：人類可讀之 Markdown 評估報告（包含架設者個資、CDN 辨識、子網域清單與置信度評級）。
+3. `<domain>_evidence.svg` / `<domain>_evidence.png`：純 Python 渲染之靜態非拖拽證據架構圖，附帶密碼學浮水印戳記。
+4. `<domain>_manifest.json`：包含所有檔案雙層 SHA-256 摘要與狀態 Payload Hash 之鑑識清單。
+5. `<domain>_report.md`：人類可讀之 Markdown 鑑識評估報告（包含個資、CDN 穿透、子網域、調閱機關矩陣與稽核日誌）。
+
+### 4. 本地視覺鑑識工作台（Local Web UI Workbench）
+
+包裝完整 CLI 能力的高密度視覺化操作介面（遵循 Impeccable 設計系統，零無效卡片）：
+```bash
+ariadns ui --port 8000 --open-browser
+```
+**工作台核心介面特性**：
+- **頂部輕量狀態列**：即時顯示目前執行項目（Module）、標的（Target）、進度（Status）、已過秒數（Elapsed），以及 7 天 MISP 誤報清單同步狀態。
+- **可視化操作指令卡片（CLI Command Cards）**：視覺化包裝 M1、M2、M3、M4 與 M7 指令，清楚說明使用目的、CLI 等價語法，並針對主動探測（M7）設置嚴格 OPSEC 風險確認閥門。
+- **下一步調查建議面板（Next-Step Recommendations）**：由當前案件事實自動推導規則建議，一鍵「Apply & Run」分步執行。
+- **證據節點篩選與主動畫圖（Deferred Rendering）**：分步執行時不即時運算圖檔以保證排版不崩潰；在主動點選「Generate Evidence Architecture Graph」前，使用者可勾選核心節點（預設已勾選核心成果，略過雜訊），生成不可動之純靜態圖檔與 SHA-256 戳記。
+- **三大結構化鑑識矩陣**：
+  - **Data Custodians Matrix**：依命題節點標的自動對應法規調閱機關（Registrar、CDN 業者、主機商、平台商）與可調閱紀錄清單。
+  - **Session Audit Trail**：記錄每次分步執行步驟、時間戳、模組、標的、新增 Fact ID 與狀態 Hash。
+  - **Cryptographic Manifest & Integrity**：呈現所有檔案雜湊，一鍵發起雙層 SHA-256 位元級驗證。
+
+### 5. 分步執行與鑑識驗證 CLI 指令集
+
+- **分步推進工作階段（Stepwise Execution）**：
+  ```bash
+  ariadns step -d example.com -m m1
+  ariadns step -d example.com -m m2
+  ariadns step -d example.com -m m3
+  ariadns step -d example.com -m m4 --target 1.2.3.4
+  ```
+- **取得下一步調查建議（Next-Step Inference）**：
+  ```bash
+  ariadns recommend -d example.com
+  ```
+- **生成靜態證據圖譜與清單（Render Evidence Graph）**：
+  ```bash
+  ariadns render-graph -d example.com --select F1,C1,F_ORIGIN,C_ORIGIN
+  ```
+- **檢視結構化命題與稽核日誌（Show Graph Propositions）**：
+  ```bash
+  ariadns show-graph -d example.com
+  ```
+- **檔案密碼學完整性驗證（Forensic Verification Tool）**：
+  ```bash
+  ariadns verify --case-dir ./reports/example.com
+  ```
+- **手動同步 7 天 MISP 誤報特徵清單**：
+  ```bash
+  ariadns sync-lists --force
+  ```
 
 ---
 
@@ -135,10 +183,16 @@ Ariadns 內建遵循 Model Context Protocol（MCP）標準的 stdio 伺服器，
 
 | 工具名稱 | 參數 | 功能說明與回傳範疇 |
 | :--- | :--- | :--- |
-| **`osint_scan`** | `domain: str`<br>`mode: str = "full"`<br>`depth: int = 1`<br>`portscan: bool = False` | 對指定網域發起情報探測。回傳精簡 JSON 摘要（包含 CDN 狀態、真實 IP 推斷、管理員信箱、Top 10 關聯網域）。 |
-| **`osint_inspect`** | `domain: str`<br>`query_type: str = "summary"`<br>`target_node: str = ""`<br>`sql_query: str = ""` | 深入檢視特定資料。支援：<br>- `"summary"`: 圖譜節點邊數摘要。<br>- `"neighbors"`: 查詢某節點的 1 跳鄰居。<br>- `"l2_candidates"`: 依置信度排序列出所有二級網域。<br>- `"sql"`: 執行安全的唯讀 `SELECT` 查詢。 |
-| **`osint_expand`** | `parent_domain: str`<br>`l2_domain: str` | 當 Agent 在分析初步結果後，判斷特定 L2 網域具威脅或關聯價值時，下令對其進行深度展開，並將節點合併至主圖譜。 |
-| **`osint_report`** | `domain: str`<br>`output_dir: str = "./reports"` | 觸發在磁碟上產生 JSON、Topology 與 Markdown 報告，並回傳絕對路徑給 Agent。 |
+| **`osint_scan`** | `domain: str`<br>`depth: int = 1`<br>`portscan: bool = False`<br>`mode: str = "full"` | 對指定網域發起全自動情報探測。回傳精簡 JSON 摘要（包含 CDN 狀態、真實 IP 推斷、管理員信箱、Top 10 關聯網域）。 |
+| **`osint_inspect`** | `domain: str`<br>`query_type: str = "summary"`<br>`target_node: str = ""`<br>`sql_query: str = ""` | 零運算直接讀取 SQLite 4 張正規化證據表。支援 `"summary"`、`"neighbors"`、`"l2_candidates"`、`"evidence_chain"`、`"custodians"`，以及以 `mode=ro` 執行的唯讀 `"sql"`。預設僅撈取繪製節點，嚴格限制回傳 $\le 500$ Tokens。 |
+| **`osint_run_step`** | `session_id: str`<br>`module_name: str`<br>`target: str`<br>`params: dict` | 分步執行指定模組（`m1`, `m2`, `m3`, `m4`, `m7`），將新事實增量合併入案件資料庫，並產生不可變稽核日誌（不自動畫圖）。 |
+| **`osint_recommend_next`** | `session_id: str` | 依據當前已發掘之事實（如 CDN 存在、非 CDN IP 發現、未探測二級網域）推導具最高優先級之下一步調查建議。 |
+| **`osint_render_graph`** | `session_id: str`<br>`output_dir: str = "./reports"`<br>`selected_prop_ids: list[str] = None` | 依據指定（或預設核心）命題節點集合，在磁碟上生成靜態 SVG/PNG 與 `_manifest.json`，並回傳 `payload_sha256`。 |
+| **`osint_read_evidence_graph`** | `session_id: str`<br>`rendered_only: bool = True`<br>`limit: int = 20` | Agent 專用結構化因果 DAG 檢索小工具。直讀 `evidence_propositions` 與 `evidence_custodians`，防止讀取龐大圖像原始碼導致 Context 溢出。 |
+| **`osint_verify_case`** | `case_dir: str` | 針對案卷資料夾執行雙層 SHA-256 驗證（包含各實體檔案 Hash 與 DAG 狀態 Payload Hash），驗證產出物未遭篡改。 |
+| **`osint_sync_lists`** | `force: bool = False` | 同步或檢查 7 天 MISP 停車網域與共享郵箱清單，離線時自動回退本機快取與靜態黑名單。 |
+| **`osint_expand`** | `parent_domain: str`<br>`l2_domain: str` | 對特定 L2 網域進行深度展開，並將節點合併至主圖譜。 |
+| **`osint_report`** | `domain: str`<br>`output_dir: str = "./reports"` | 觸發在磁碟上產生 JSON、Topology、SVG/PNG 與 Markdown 報告，並回傳絕對路徑給 Agent。 |
 
 ### 3. MCP 唯讀資源（Resources）
 - `ariadns://sessions`：列出 SQLite 中所有歷史調查案件與時間戳。
