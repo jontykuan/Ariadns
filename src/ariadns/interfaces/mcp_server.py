@@ -7,10 +7,12 @@ try:
     from mcp.server.mcpserver import MCPServer as FastMCP
 except ImportError:
     from mcp.server.fastmcp import FastMCP
+
 from ariadns.models.config import AppConfig
 from ariadns.models.enums import NodeType
 from ariadns.modules.m5_orchestrator import Orchestrator
 from ariadns.modules.m6_reporting import ReportingEngine
+from ariadns.modules.m7_manual_oob import trigger_manual_oob
 from ariadns.storage.db import DatabaseManager
 from ariadns.storage.graph_store import PropertyGraphStore
 
@@ -40,20 +42,23 @@ def osint_scan(
     infra = result.infrastructure
     id_prof = result.identity_profile
 
-    # Compact digest for LLM context economy
     return {
         "status": "COMPLETED",
         "target_domain": clean_domain,
         "current_ip": infra.current_ip,
         "is_cdn": infra.is_cdn,
         "cdn_provider": infra.cdn_provider,
+        "asn_org_name": infra.asn_org_name,
+        "registrar_name": id_prof.registrar_name,
         "suspected_origin_ip": infra.suspected_origin_ip,
         "origin_verification_status": infra.origin_verification_status,
         "server_banner": infra.server_banner,
         "soa_admin_email": id_prof.soa_admin_email,
         "verification_tokens": id_prof.verification_tokens,
+        "html_tracking_tokens": id_prof.html_tracking_tokens,
         "subdomains_count": len(result.subdomains),
         "l2_domains_count": len(result.l2_recursive_results),
+        "evidence_propositions_count": len(result.evidence_chain),
         "top_l2_candidates": [
             {"domain": l2.domain, "relation": l2.relation_type, "confidence": l2.confidence}
             for l2 in result.l2_recursive_results[:10]
@@ -68,7 +73,7 @@ def osint_inspect(
     sql_query: str = "",
     limit: int = 20
 ) -> dict[str, Any]:
-    """Inspect investigation graph details or execute guarded read-only SELECT SQL."""
+    """Inspect investigation graph details, evidence chain, custodians, or execute guarded read-only SELECT SQL."""
     orchestrator = get_orchestrator()
     clean_domain = domain.strip().lower()
     store = PropertyGraphStore(orchestrator.db, session_id=clean_domain)
@@ -81,6 +86,42 @@ def osint_inspect(
             return {"rows": rows[:limit]}
         except Exception as e:
             return {"error": str(e)}
+
+    elif query_type == "evidence_chain":
+        # Load from session result
+        cached = orchestrator.db.get_dns_cache(clean_domain, "A")
+        # Run lightweight investigation if not present
+        res = orchestrator.run_investigation(clean_domain, depth=1)
+        propositions = [
+            {
+                "prop_id": p.prop_id,
+                "node_kind": p.node_kind,
+                "rank": p.rank,
+                "statement": p.statement,
+                "premises": p.premises,
+                "rule_name": p.rule_name,
+                "target_entity": p.target_entity,
+                "entity_type": p.entity_type,
+            }
+            for p in res.evidence_chain[:limit]
+        ]
+        return {"session_id": clean_domain, "evidence_chain": propositions}
+
+    elif query_type == "custodians":
+        res = orchestrator.run_investigation(clean_domain, depth=1)
+        custodian_matrix = []
+        for p in res.evidence_chain:
+            if p.node_kind == "CONCLUSION" and p.custodians:
+                for c in p.custodians:
+                    custodian_matrix.append({
+                        "conclusion_id": p.prop_id,
+                        "target_entity": p.target_entity,
+                        "entity_type": p.entity_type,
+                        "custodian_name": c.custodian_name,
+                        "custodian_role": c.custodian_role,
+                        "queryable_records": c.queryable_records,
+                    })
+        return {"session_id": clean_domain, "custodians": custodian_matrix[:limit]}
 
     elif query_type == "neighbors":
         if not target_node:
@@ -109,7 +150,6 @@ def osint_inspect(
         return {"l2_candidates": sorted(candidates, key=lambda x: x["score"], reverse=True)[:limit]}
 
     else:
-        # Default summary
         return {
             "session_id": clean_domain,
             "total_nodes": store.graph.number_of_nodes(),
@@ -127,10 +167,8 @@ def osint_expand(
     clean_parent = parent_domain.strip().lower()
     clean_l2 = l2_domain.strip().lower()
 
-    # Deep probe target L2 domain
     l2_result = orchestrator.run_investigation(domain=clean_l2, depth=1)
 
-    # Merge nodes and edges into parent domain graph
     parent_store = PropertyGraphStore(orchestrator.db, session_id=clean_parent)
     l2_store = PropertyGraphStore(orchestrator.db, session_id=clean_l2)
 
@@ -150,11 +188,28 @@ def osint_expand(
     }
 
 @mcp.tool()
+def osint_manual_oob(
+    target_endpoint_url: str,
+    callback_url: str,
+    param_name: str = "url",
+    http_method: str = "GET",
+    acknowledge_opsec_risk: bool = False
+) -> dict[str, Any]:
+    """Execute isolated manual OOB callback probe. Mandatory: Requires acknowledge_opsec_risk=True."""
+    return trigger_manual_oob(
+        target_endpoint_url=target_endpoint_url,
+        callback_url=callback_url,
+        param_name=param_name,
+        http_method=http_method,
+        acknowledge_opsec_risk=acknowledge_opsec_risk,
+    )
+
+@mcp.tool()
 def osint_report(
     domain: str,
     output_dir: str = "./reports"
 ) -> dict[str, Any]:
-    """Generate result.json, topology.json and report.md on disk and return paths."""
+    """Generate result.json, topology.json, evidence_chain.json and report.md on disk and return paths."""
     orchestrator = get_orchestrator()
     clean_domain = domain.strip().lower()
     result = orchestrator.run_investigation(clean_domain, depth=1)
@@ -165,6 +220,7 @@ def osint_report(
     return {
         "domain": clean_domain,
         "result_json": str(paths["result_json"].resolve()),
+        "evidence_chain_json": str(paths["evidence_chain_json"].resolve()),
         "topology_json": str(paths["topology_json"].resolve()),
         "report_md": str(paths["report_md"].resolve()),
     }

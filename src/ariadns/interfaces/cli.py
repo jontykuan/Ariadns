@@ -4,6 +4,7 @@ from pathlib import Path
 from ariadns.models.config import AppConfig
 from ariadns.modules.m5_orchestrator import Orchestrator
 from ariadns.modules.m6_reporting import ReportingEngine
+from ariadns.modules.m7_manual_oob import trigger_manual_oob
 from ariadns.storage.db import DatabaseManager
 from ariadns.storage.graph_store import PropertyGraphStore
 from ariadns.utils.tool_runner import check_environment
@@ -21,6 +22,14 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--depth", type=int, default=1, choices=[1, 2], help="Recursion depth (default: 1)")
     run_parser.add_argument("--output-dir", default="./reports", help="Directory to save reports")
     run_parser.add_argument("--no-portscan", action="store_true", help="Skip port scanning")
+
+    # Command: manual-oob (isolated OOB probe)
+    oob_parser = subparsers.add_parser("manual-oob", help="Trigger manual OOB callback probe (Requires risk ack)")
+    oob_parser.add_argument("-t", "--target-url", required=True, help="Target endpoint URL (e.g. https://target.com/preview)")
+    oob_parser.add_argument("-c", "--callback-url", required=True, help="Your listener / canary callback URL")
+    oob_parser.add_argument("-p", "--param", default="url", help="Parameter name to inject callback URL into")
+    oob_parser.add_argument("-m", "--method", default="GET", choices=["GET", "POST"], help="HTTP method")
+    oob_parser.add_argument("--ack-risk", action="store_true", help="Acknowledge OPSEC risk to proceed with probe")
 
     # Command: repl (interactive console)
     repl_parser = subparsers.add_parser("repl", help="Start interactive REPL console")
@@ -53,9 +62,28 @@ def execute_run(domain: str, depth: int, output_dir: str, no_portscan: bool) -> 
     paths = reporter.export_all(result, graph_store=graph_store)
 
     print("[+] Investigation complete!")
-    print(f"    - JSON Result: {paths['result_json']}")
-    print(f"    - Topology:    {paths['topology_json']}")
-    print(f"    - Report:      {paths['report_md']}")
+    print(f"    - JSON Result:     {paths['result_json']}")
+    print(f"    - Evidence Chain:  {paths['evidence_chain_json']}")
+    print(f"    - Topology:        {paths['topology_json']}")
+    print(f"    - Report:          {paths['report_md']}")
+    return 0
+
+def execute_manual_oob(target_url: str, callback_url: str, param: str, method: str, ack_risk: bool) -> int:
+    res = trigger_manual_oob(
+        target_endpoint_url=target_url,
+        callback_url=callback_url,
+        param_name=param,
+        http_method=method,
+        acknowledge_opsec_risk=ack_risk,
+    )
+    if not res.get("callback_sent"):
+        print(f"[-] {res.get('warning', 'OOB Probe Failed')}")
+        if res.get("error"):
+            print(f"    Reason: {res['error']}")
+        return 1
+    print(f"[+] OOB trigger sent to {target_url} via {method} with callback {callback_url}.")
+    print(f"    HTTP Status: {res.get('target_status_code')}")
+    print(f"    Note: {res.get('note')}")
     return 0
 
 def execute_doctor() -> int:
@@ -90,6 +118,14 @@ def main(args: list[str] | None = None) -> int:
             depth=parsed.depth,
             output_dir=parsed.output_dir,
             no_portscan=parsed.no_portscan,
+        )
+    elif parsed.command == "manual-oob":
+        return execute_manual_oob(
+            target_url=parsed.target_url,
+            callback_url=parsed.callback_url,
+            param=parsed.param,
+            method=parsed.method,
+            ack_risk=parsed.ack_risk,
         )
     elif parsed.command == "doctor":
         return execute_doctor()

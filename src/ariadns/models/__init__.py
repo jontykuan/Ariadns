@@ -4,6 +4,7 @@ from ariadns.models.enums import (
     ModuleStatus,
     NodeType,
     EdgeType,
+    PropositionKind,
 )
 from ariadns.models.entities import (
     IdentityProfile,
@@ -11,6 +12,8 @@ from ariadns.models.entities import (
     SubdomainRecord,
     PivotResult,
     L2Result,
+    DataCustodian,
+    PropositionNode,
     InvestigationResult,
 )
 
@@ -20,10 +23,13 @@ __all__ = [
     "ModuleStatus",
     "NodeType",
     "EdgeType",
+    "PropositionKind",
     "IdentityProfile",
     "Infrastructure",
     "SubdomainRecord",
     "PivotResult",
     "L2Result",
+    "DataCustodian",
+    "PropositionNode",
     "InvestigationResult",
 ]
