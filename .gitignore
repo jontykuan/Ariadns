@@ -1,3 +1,9 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
@@ -5,11 +11,21 @@ __pycache__/
 .installed.cfg
 *.egg
 .pytest_cache/
+
+# Case reports & local database
 reports/
 *.db
 *.sqlite
 config.yaml
+
+# IDE, Worktrees, AI agent harnesses
 .worktrees/
 .cursor/
 .gemini/
+
+# Development communication & specification records
+.mnb/
 開發需求書.md
+
+# Test suite (untracked for production release)
+tests/

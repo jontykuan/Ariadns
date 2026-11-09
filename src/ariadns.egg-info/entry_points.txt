@@ -1,3 +1,0 @@
-[console_scripts]
-ariadns = ariadns.interfaces.cli:main
-ariadns-mcp = ariadns.interfaces.mcp_server:main
