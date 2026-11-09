@@ -227,6 +227,9 @@ def execute_doctor() -> int:
     for name, info in tools.items():
         status = "[INSTALLED]" if info["installed"] else "[MISSING -> FALLBACK TO NATIVE]"
         print(f"    - {name:<12}: {status} (Path: {info['path']})")
+    from ariadns.modules.m6_reporting import HAS_PIL
+    pil_status = "[INSTALLED]" if HAS_PIL else "[MISSING -> FALLBACK TO SVG ONLY (pip install pillow)]"
+    print(f"    - {'pillow':<12}: {pil_status}")
     return 0
 
 def execute_init() -> int:

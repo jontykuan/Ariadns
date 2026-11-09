@@ -26,6 +26,7 @@ config.yaml
 # Development communication & specification records
 .mnb/
 開發需求書.md
+DESIGN.md
 
 # Test suite (untracked for production release)
 tests/
