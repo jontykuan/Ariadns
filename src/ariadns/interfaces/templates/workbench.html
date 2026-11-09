@@ -1354,27 +1354,116 @@
       }
     }
 
-    async function loadSession() {
+    let stopwatchTimer = null;
+    let stopwatchStartTime = 0;
+
+    function startStopwatch() {
+      if (stopwatchTimer) clearInterval(stopwatchTimer);
+      stopwatchStartTime = Date.now();
+      const el = document.getElementById("indElapsed");
+      if (el) el.textContent = "0.0s";
+      stopwatchTimer = setInterval(() => {
+        const sec = ((Date.now() - stopwatchStartTime) / 1000).toFixed(1);
+        const elTimer = document.getElementById("indElapsed");
+        if (elTimer) elTimer.textContent = `${sec}s`;
+      }, 100);
+    }
+
+    function stopStopwatch() {
+      if (stopwatchTimer) {
+        clearInterval(stopwatchTimer);
+        stopwatchTimer = null;
+      }
+      if (stopwatchStartTime > 0) {
+        const finalSec = ((Date.now() - stopwatchStartTime) / 1000).toFixed(1);
+        const el = document.getElementById("indElapsed");
+        if (el) el.textContent = `${finalSec}s`;
+      }
+    }
+
+    function clearSessionDisplays() {
+      const t = TRANSLATIONS[currentLang];
+      propositionsData = [];
+      manifestData = null;
+
+      // Reset Graph Area
+      const wrapper = document.getElementById("graphImageWrapper");
+      const empty = document.getElementById("graphEmptyState");
+      const watermark = document.getElementById("watermarkHash");
+      if (wrapper) {
+        wrapper.innerHTML = "";
+        wrapper.style.display = "none";
+      }
+      if (empty) empty.style.display = "block";
+      if (watermark) watermark.textContent = t.watermarkNotRendered;
+
+      // Reset Propositions list
+      const propList = document.getElementById("propList");
+      if (propList) {
+        propList.innerHTML = `<div class="empty-state" id="txtPropEmpty" style="padding: 10px;">${t.propNoRecorded}</div>`;
+      }
+
+      // Reset Recommendations
+      const recContainer = document.getElementById("recContainer");
+      const recCount = document.getElementById("recCount");
+      if (recCount) recCount.textContent = `0 ${t.recActive}`;
+      if (recContainer) {
+        recContainer.innerHTML = `<div class="empty-state" id="txtRecEmpty" style="padding: 10px;">${t.recEmpty}</div>`;
+      }
+
+      // Reset Custodians table
+      const custBody = document.getElementById("custodiansTableBody");
+      if (custBody) {
+        custBody.innerHTML = `<tr><td colspan="5" id="txtNoCustodians" style="text-align:center; color: var(--text-faint);">${t.noCustodians}</td></tr>`;
+      }
+
+      // Reset Audit table
+      const auditBody = document.getElementById("auditTableBody");
+      if (auditBody) {
+        auditBody.innerHTML = `<tr><td colspan="6" id="txtNoAudit" style="text-align:center; color: var(--text-faint);">${t.noAudit}</td></tr>`;
+      }
+
+      // Reset Manifest table
+      const manifestBody = document.getElementById("manifestTableBody");
+      if (manifestBody) {
+        manifestBody.innerHTML = `<tr><td colspan="3" id="txtManifestEmpty" style="text-align:center; color: var(--text-faint);">${t.manifestEmpty}</td></tr>`;
+      }
+    }
+
+    async function loadSession(preserveElapsed = false) {
       const input = document.getElementById("domainInput").value.trim();
       const t = TRANSLATIONS[currentLang];
       if (!input) {
         alert(t.enterDomainAlert);
         return;
       }
+
+      const isNewTarget = (currentSession !== input);
       currentSession = input;
+
+      if (isNewTarget) {
+        clearSessionDisplays();
+      }
 
       document.getElementById("indTarget").textContent = currentSession;
       document.getElementById("indProgress").textContent = "FETCHING";
 
-      const start = Date.now();
+      if (!preserveElapsed) {
+        startStopwatch();
+      }
+
       try {
         const resp = await fetch(`/api/status?session_id=${encodeURIComponent(currentSession)}`);
         const data = await resp.json();
-        const elapsed = ((Date.now() - start) / 1000).toFixed(1);
-        document.getElementById("indElapsed").textContent = `${elapsed}s`;
+        if (!preserveElapsed) {
+          stopStopwatch();
+        }
         document.getElementById("indProgress").textContent = t.readyStatus;
         renderSessionData(data);
       } catch (err) {
+        if (!preserveElapsed) {
+          stopStopwatch();
+        }
         document.getElementById("indProgress").textContent = "ERROR";
         console.error("Failed to load session:", err);
       }
@@ -1475,6 +1564,31 @@
       if (custCount === 0) {
         custBody.innerHTML = `<tr><td colspan="5" id="txtNoCustodians" style="text-align:center; color: var(--text-faint);">${t.noCustodians}</td></tr>`;
       }
+
+      // Evidence Graph and Manifest Synchronization
+      const wrapper = document.getElementById("graphImageWrapper");
+      const empty = document.getElementById("graphEmptyState");
+      const watermark = document.getElementById("watermarkHash");
+      if (data.manifest && (data.svg_url || data.png_url)) {
+        manifestData = data.manifest;
+        if (watermark) watermark.textContent = data.payload_sha256 || t.watermarkNotRendered;
+        const imgUrl = (currentImageFormat === "svg") ? data.svg_url : data.png_url;
+        if (wrapper && empty) {
+          wrapper.innerHTML = `<img id="evidenceGraphImg" class="graph-image" alt="Ariadns Evidence Architecture DAG" src="${imgUrl}&t=${Date.now()}">`;
+          wrapper.style.display = "block";
+          empty.style.display = "none";
+        }
+        renderManifestTable(data.manifest);
+      } else {
+        manifestData = null;
+        if (watermark) watermark.textContent = t.watermarkNotRendered;
+        if (wrapper && empty) {
+          wrapper.innerHTML = "";
+          wrapper.style.display = "none";
+          empty.style.display = "block";
+        }
+        renderManifestTable(null);
+      }
     }
 
     async function runStep(moduleName, target) {
@@ -1484,8 +1598,13 @@
         alert(t.enterDomainAlert);
         return;
       }
+      const isNewTarget = (currentSession !== actualTarget);
       currentSession = actualTarget;
       document.getElementById("domainInput").value = currentSession;
+
+      if (isNewTarget) {
+        clearSessionDisplays();
+      }
 
       // Prerequisite guidance check for origin probe (m3) and pivot analysis (m4)
       if (moduleName === "m3" || moduleName === "m4") {
@@ -1502,7 +1621,7 @@
       document.getElementById("indProgress").textContent = t.runningStatus;
       document.getElementById("indTarget").textContent = actualTarget;
 
-      const startTime = Date.now();
+      startStopwatch();
       try {
         const resp = await fetch("/api/step", {
           method: "POST",
@@ -1515,13 +1634,13 @@
           })
         });
         const res = await resp.json();
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        document.getElementById("indElapsed").textContent = `${elapsed}s`;
+        stopStopwatch();
         document.getElementById("indProgress").textContent = t.doneStatus;
 
-        // Reload updated session data
-        await loadSession();
+        // Reload updated session data while preserving elapsed execution time
+        await loadSession(true);
       } catch (err) {
+        stopStopwatch();
         document.getElementById("indProgress").textContent = "FAILED";
         console.error("Step execution error:", err);
       }
@@ -1536,6 +1655,7 @@
       const selectedChecks = Array.from(document.querySelectorAll(".prop-check:checked")).map(cb => cb.value);
       document.getElementById("indProgress").textContent = t.renderingStatus;
 
+      startStopwatch();
       try {
         const resp = await fetch("/api/render", {
           method: "POST",
@@ -1546,6 +1666,7 @@
           })
         });
         const data = await resp.json();
+        stopStopwatch();
         manifestData = data.manifest;
 
         document.getElementById("indProgress").textContent = t.doneStatus;
@@ -1562,6 +1683,7 @@
         // Update Manifest Table
         renderManifestTable(data.manifest);
       } catch (err) {
+        stopStopwatch();
         document.getElementById("indProgress").textContent = "RENDER_ERROR";
         console.error("Render failed:", err);
       }

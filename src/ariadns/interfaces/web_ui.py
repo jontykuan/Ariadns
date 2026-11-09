@@ -118,6 +118,28 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
         recs = NextStepRecommender(db, orch.config).recommend(session_id)
         warninglist_synced = db.get_warninglist_last_synced() is not None
 
+        clean = session_id.strip().lower().replace(":", "_").replace("/", "_").replace("\\", "_").replace(".", "_")
+        base_dir = Path(WorkbenchRequestHandler.output_dir)
+        manifest_path = base_dir / session_id / f"{clean}_manifest.json"
+        if not manifest_path.exists():
+            manifest_path = base_dir / f"{clean}_manifest.json"
+        if not manifest_path.exists():
+            manifest_path = base_dir / session_id / "manifest.json"
+
+        existing_manifest = None
+        existing_hash = None
+        existing_svg = None
+        existing_png = None
+        if manifest_path.exists():
+            try:
+                m_data = json.loads(manifest_path.read_text(encoding="utf-8"))
+                existing_manifest = m_data
+                existing_hash = m_data.get("payload_sha256")
+                existing_svg = f"/api/image?session_id={session_id}&type=svg"
+                existing_png = f"/api/image?session_id={session_id}&type=png"
+            except Exception:
+                pass
+
         resp_data = {
             "status": "OK",
             "session_id": session_id,
@@ -129,6 +151,10 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             "propositions": [asdict(p) for p in props],
             "audit_logs": [asdict(l) for l in logs],
             "recommendations": [asdict(r) for r in recs],
+            "manifest": existing_manifest,
+            "payload_sha256": existing_hash,
+            "svg_url": existing_svg,
+            "png_url": existing_png,
         }
         self._send_json(200, resp_data)
 
