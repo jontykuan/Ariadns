@@ -21,7 +21,7 @@ def load_template_html() -> str:
     tpl_path = Path(__file__).parent / "templates" / "workbench.html"
     if tpl_path.exists():
         return tpl_path.read_text(encoding="utf-8")
-    return "<html><body><h3>Ariadns Forensic Workbench</h3></body></html>"
+    return "<html><body><h3>ARIADNS 網域公開情資分析平台</h3></body></html>"
 
 class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
     """HTTP Request Handler serving the Ariadns Forensic Workbench."""

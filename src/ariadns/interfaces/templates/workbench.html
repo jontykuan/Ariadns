@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Ariadns 鑑識工作台</title>
+  <title>ARIADNS 網域公開情資分析平台</title>
   <style>
     :root {
       --bg-canvas: #090d16;
@@ -600,7 +600,7 @@
   <!-- Top Status Bar -->
   <header class="status-bar">
     <div class="brand-section">
-      <span class="brand-title" id="txtBrandTitle">Ariadns 鑑識工作台</span>
+      <span class="brand-title" id="txtBrandTitle">ARIADNS 網域公開情資分析平台</span>
       <form class="session-form" id="sessionForm" onsubmit="event.preventDefault(); loadSession();">
         <label for="domainInput" style="display:none;">目標網域</label>
         <input type="text" id="domainInput" class="session-input" placeholder="輸入目標網域，如 example.com" value="" required>
@@ -647,55 +647,55 @@
           <!-- Card M1 -->
           <div class="card">
             <div class="card-header">
-              <span class="card-title" id="txtM1Title">M1 DNS 與網路關聯</span>
+              <span class="card-title" id="txtM1Title">DNS 與基礎拓撲</span>
               <span class="card-cmd">ariadns step -m m1</span>
             </div>
             <div class="card-desc" id="txtM1Desc">查詢權威 NS、MX、SOA 聯絡資訊、TXT 驗證紀錄與 A、AAAA 位址。</div>
             <div class="card-actions">
-              <button type="button" class="btn btn-primary" id="btnRunM1" onclick="runStep('m1')">執行 M1</button>
+              <button type="button" class="btn btn-primary" id="btnRunM1" onclick="runStep('m1')">執行探測</button>
             </div>
           </div>
 
           <!-- Card M2 -->
           <div class="card">
             <div class="card-header">
-              <span class="card-title" id="txtM2Title">M2 子網域列舉</span>
+              <span class="card-title" id="txtM2Title">子網域挖掘</span>
               <span class="card-cmd">ariadns step -m m2</span>
             </div>
             <div class="card-desc" id="txtM2Desc">比對憑證透明度紀錄與字典清單，搜集關聯子網域。</div>
             <div class="card-actions">
-              <button type="button" class="btn btn-primary" id="btnRunM2" onclick="runStep('m2')">執行 M2</button>
+              <button type="button" class="btn btn-primary" id="btnRunM2" onclick="runStep('m2')">執行挖掘</button>
             </div>
           </div>
 
           <!-- Card M3 -->
           <div class="card">
             <div class="card-header">
-              <span class="card-title" id="txtM3Title">M3 真實伺服器探測</span>
+              <span class="card-title" id="txtM3Title">來源主機探測</span>
               <span class="card-cmd">ariadns step -m m3</span>
             </div>
             <div class="card-desc" id="txtM3Desc">比對歷史解析紀錄、HTTP 標頭特徵與 Favicon 雜湊，找出 CDN 背後的來源主機。</div>
             <div class="card-actions">
-              <button type="button" class="btn btn-primary" id="btnRunM3" onclick="runStep('m3')">執行 M3</button>
+              <button type="button" class="btn btn-primary" id="btnRunM3" onclick="runStep('m3')">探測來源</button>
             </div>
           </div>
 
           <!-- Card M4 -->
           <div class="card">
             <div class="card-header">
-              <span class="card-title" id="txtM4Title">M4 關聯轉向分析</span>
+              <span class="card-title" id="txtM4Title">關聯轉向分析</span>
               <span class="card-cmd">ariadns step -m m4</span>
             </div>
             <div class="card-desc" id="txtM4Desc">由反向 IP、共用主機或憑證標記向外延伸，並過濾已知停泊清單。</div>
             <div class="card-actions">
-              <button type="button" class="btn btn-primary" id="btnRunM4" onclick="runStep('m4')">執行 M4</button>
+              <button type="button" class="btn btn-primary" id="btnRunM4" onclick="runStep('m4')">執行轉向</button>
             </div>
           </div>
 
           <!-- Card M7 -->
           <div class="card">
             <div class="card-header">
-              <span class="card-title" id="txtM7Title">M7 主動回連驗證</span>
+              <span class="card-title" id="txtM7Title">主動回連驗證</span>
               <span class="card-cmd">ariadns manual-oob</span>
             </div>
             <div class="card-desc" id="txtM7Desc">向指定端點發送包含自訂監聽位址的請求，確認原始主機連線。</div>
@@ -708,7 +708,7 @@
               </label>
             </div>
             <div class="card-actions">
-              <button type="button" id="m7RunBtn" class="btn" disabled onclick="runStep('m7')">執行 M7</button>
+              <button type="button" id="m7RunBtn" class="btn" disabled onclick="runStep('m7')">發送驗證</button>
             </div>
           </div>
         </div>
@@ -890,7 +890,7 @@
   <script>
     const TRANSLATIONS = {
       zh: {
-        brandTitle: "Ariadns 鑑識工作台",
+        brandTitle: "ARIADNS 網域公開情資分析平台",
         domainPlaceholder: "輸入目標網域，如 example.com",
         loadSession: "載入案件",
         indicatorModule: "模組:",
@@ -904,24 +904,29 @@
 
         // Command Cards
         cmdCardsTitle: "調查模組",
-        m1Title: "M1 DNS 與網路關聯",
+        m1Title: "DNS 與基礎拓撲",
         m1Desc: "查詢權威 NS、MX、SOA 聯絡資訊、TXT 驗證紀錄與 A、AAAA 位址。",
-        m1Btn: "執行 M1",
-        m2Title: "M2 子網域列舉",
+        m1Btn: "執行探測",
+        m2Title: "子網域挖掘",
         m2Desc: "比對憑證透明度紀錄與字典清單，搜集關聯子網域。",
-        m2Btn: "執行 M2",
-        m3Title: "M3 真實伺服器探測",
+        m2Btn: "執行挖掘",
+        m3Title: "來源主機探測",
         m3Desc: "比對歷史解析紀錄、HTTP 標頭特徵與 Favicon 雜湊，找出 CDN 背後的來源主機。",
-        m3Btn: "執行 M3",
-        m4Title: "M4 關聯轉向分析",
+        m3Btn: "探測來源",
+        m4Title: "關聯轉向分析",
         m4Desc: "由反向 IP、共用主機或憑證標記向外延伸，並過濾已知停泊清單。",
-        m4Btn: "執行 M4",
-        m7Title: "M7 主動回連驗證",
+        m4Btn: "執行轉向",
+        m7Title: "主動回連驗證",
         m7Desc: "向指定端點發送包含自訂監聽位址的請求，確認原始主機連線。",
         m7OpsecWarning: "主動探測提醒",
         m7OpsecText: "此操作會向外部目標送出網路流量，請先確認已獲得授權。",
         m7OpsecAck: "確認授權並繼續執行",
-        m7Btn: "執行 M7",
+        m7Btn: "發送驗證",
+
+        // Prerequisite Guidance
+        m3PrereqWarning: "尚未搜集目標的基礎 DNS 與 IP 資訊。建議先執行「DNS 與基礎拓撲」或參考下方的「建議下一步」。",
+        m4PrereqWarning: "尚未發現可轉向之自建主機、獨立 IP 或識別標記。建議先執行「DNS 與基礎拓撲」搜集關聯資產，或點擊下方的「建議下一步」。",
+        confirmProceedPrompt: "是否仍要直接執行？",
 
         // Recommendations
         recTitle: "建議下一步",
@@ -1017,24 +1022,29 @@
 
         // Command Cards
         cmdCardsTitle: "Visual CLI Command Cards",
-        m1Title: "M1 Local DNS & Topology",
+        m1Title: "DNS & Infrastructure Topology",
         m1Desc: "Probe authoritative NS, MX, SOA email, TXT verification tokens, and A/AAAA IPs.",
-        m1Btn: "Run M1",
-        m2Title: "M2 Subdomain Enumeration",
+        m1Btn: "Run Probe",
+        m2Title: "Subdomain Enumeration",
         m2Desc: "Passive certificate transparency logs and DNS wordlists to uncover subdomains.",
-        m2Btn: "Run M2",
-        m3Title: "M3 Candidate Origin Detection",
+        m2Btn: "Enumerate",
+        m3Title: "Origin Server Discovery",
         m3Desc: "Historical pre-CDN pDNS, HTTP Host collision, and Favicon SHA-256 fingerprinting.",
-        m3Btn: "Run M3",
-        m4Title: "M4 Infrastructure Pivoting",
+        m3Btn: "Discover",
+        m4Title: "Infrastructure Pivoting",
         m4Desc: "Reverse IP, custom MX/NS, and shared token pivoting with 7-day warninglist filtering.",
-        m4Btn: "Run M4",
-        m7Title: "M7 Manual OOB Callback Probe",
+        m4Btn: "Pivot",
+        m7Title: "Active Callback Verification",
         m7Desc: "Isolated active callback injection to verify origin infrastructure.",
         m7OpsecWarning: "Active Probe Advisory",
         m7OpsecText: "Generates live outbound callback traffic to external target. Requires explicit authorization.",
         m7OpsecAck: "Confirm authorization and proceed",
-        m7Btn: "Run M7",
+        m7Btn: "Trigger Probe",
+
+        // Prerequisite Guidance
+        m3PrereqWarning: "No baseline DNS or IP records collected yet. It is recommended to run 'DNS & Infrastructure Topology' first or follow 'Next-Step Recommendations'.",
+        m4PrereqWarning: "No pivotable IPs, name servers, or tokens discovered yet. It is recommended to run 'DNS & Infrastructure Topology' first or follow 'Next-Step Recommendations'.",
+        confirmProceedPrompt: "Do you still wish to proceed?",
 
         // Recommendations
         recTitle: "Next-Step Recommendations",
@@ -1476,6 +1486,17 @@
       }
       currentSession = actualTarget;
       document.getElementById("domainInput").value = currentSession;
+
+      // Prerequisite guidance check for origin probe (m3) and pivot analysis (m4)
+      if (moduleName === "m3" || moduleName === "m4") {
+        const hasBaseline = propositionsData && propositionsData.length > 0;
+        if (!hasBaseline) {
+          const warningMsg = (moduleName === "m3") ? t.m3PrereqWarning : t.m4PrereqWarning;
+          if (!confirm(`${warningMsg}\n\n${t.confirmProceedPrompt}`)) {
+            return;
+          }
+        }
+      }
 
       document.getElementById("indModule").textContent = moduleName.toUpperCase();
       document.getElementById("indProgress").textContent = t.runningStatus;
