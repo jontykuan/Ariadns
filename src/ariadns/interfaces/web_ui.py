@@ -71,6 +71,10 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             self._handle_get_verify(query)
             return
 
+        if path == "/api/sessions":
+            self._handle_get_sessions()
+            return
+
         self._send_error(404, "Not Found")
 
     def do_POST(self) -> None:
@@ -104,6 +108,11 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
         if WorkbenchRequestHandler.orchestrator is None:
             WorkbenchRequestHandler.orchestrator = Orchestrator()
         return WorkbenchRequestHandler.orchestrator
+
+    def _handle_get_sessions(self) -> None:
+        orch = self._get_orchestrator()
+        sessions = orch.db.list_sessions()
+        self._send_json(200, {"status": "OK", "sessions": sessions})
 
     def _handle_get_status(self, query: dict[str, list[str]]) -> None:
         session_id = query.get("session_id", [""])[0].strip()
@@ -140,9 +149,16 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             except Exception:
                 pass
 
+        targets = list(dict.fromkeys(
+            [p.target_entity for p in props if p.target_entity] +
+            [l.target for l in logs if l.target] +
+            [session_id]
+        ))
+
         resp_data = {
             "status": "OK",
             "session_id": session_id,
+            "targets": targets,
             "active_module": "IDLE",
             "target": session_id,
             "progress": "READY",

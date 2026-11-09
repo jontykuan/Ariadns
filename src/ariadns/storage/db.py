@@ -403,3 +403,47 @@ class DatabaseManager:
                 if r["indicator_value"] in val:
                     return True
         return False
+
+    def list_sessions(self) -> list[dict[str, Any]]:
+        """List all distinct sessions across propositions, audit logs, and investigation sessions with targets."""
+        with self.get_connection() as conn:
+            # Query union of session_ids
+            session_rows = conn.execute("""
+                SELECT DISTINCT session_id FROM (
+                    SELECT session_id FROM evidence_propositions
+                    UNION
+                    SELECT session_id FROM session_audit_logs
+                    UNION
+                    SELECT session_id FROM investigation_sessions
+                ) ORDER BY session_id ASC
+            """).fetchall()
+
+            sessions: list[dict[str, Any]] = []
+            for s in session_rows:
+                s_id = s["session_id"]
+                p_count = conn.execute(
+                    "SELECT COUNT(*) AS cnt FROM evidence_propositions WHERE session_id = ?",
+                    (s_id,)
+                ).fetchone()["cnt"]
+
+                # Extract distinct targets from propositions and audit logs
+                t_rows = conn.execute("""
+                    SELECT DISTINCT target FROM (
+                        SELECT target_entity AS target FROM evidence_propositions 
+                        WHERE session_id = ? AND target_entity != ''
+                        UNION
+                        SELECT target FROM session_audit_logs 
+                        WHERE session_id = ? AND target != ''
+                    )
+                """, (s_id, s_id)).fetchall()
+
+                targets = [r["target"] for r in t_rows]
+                if not targets:
+                    targets = [s_id]
+
+                sessions.append({
+                    "session_id": s_id,
+                    "targets": targets,
+                    "proposition_count": p_count,
+                })
+            return sessions
