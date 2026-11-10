@@ -16,9 +16,19 @@ from ariadns.utils.tool_runner import check_environment
 from ariadns.utils.warninglist_sync import WarninglistSynchronizer
 
 def build_parser() -> argparse.ArgumentParser:
+    epilog_text = (
+        "API Configuration (config.yaml):\n"
+        "  Ariadns is 100% functional keyless by default using Team Cymru BGP/ASN, crt.sh, and local probers.\n"
+        "  To enable optional historical passive DNS and extended pivoting, run 'ariadns init' and fill in config.yaml:\n"
+        "    - virustotal (Free tier: 4 req/min, 500 req/day)\n"
+        "    - alienvault_otx (Free API key for historical pDNS)\n"
+        "    - securitytrails, whoisxml, viewdns, hackertarget, publicwww (Optional)\n"
+    )
     parser = argparse.ArgumentParser(
         prog="ariadns",
-        description="Ariadns: Automated Domain OSINT & Pivoting Engine"
+        description="Ariadns: Automated Domain OSINT & Pivoting Engine",
+        epilog=epilog_text,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     subparsers = parser.add_subparsers(dest="command", help="Available subcommands")
 
@@ -283,13 +293,19 @@ def execute_init() -> int:
     if example_file.exists():
         cfg_file.write_text(example_file.read_text(encoding="utf-8"), encoding="utf-8")
         print("[+] Initialized config.yaml from config.yaml.example.")
+        print("[*] Note: Ariadns is fully operational keyless. Add optional VirusTotal/OTX API keys to config.yaml if available.")
         return 0
     print("[-] config.yaml.example not found.")
     return 1
 
 def main(args: list[str] | None = None) -> int:
     parser = build_parser()
-    parsed = parser.parse_args(args)
+    effective_args = sys.argv[1:] if args is None else list(args)
+    if not effective_args or any(a.lower() in ("help", "/h", "-h", "--help", "?") for a in effective_args):
+        parser.print_help()
+        return 0
+
+    parsed = parser.parse_args(effective_args)
 
     if parsed.command == "run" or (getattr(parsed, "domain", None) and not parsed.command):
         target = parsed.domain

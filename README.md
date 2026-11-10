@@ -1,5 +1,10 @@
 # Ariadns: Automated Domain OSINT & Pivoting Engine
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Release v1.0.4](https://img.shields.io/badge/release-v1.0.4-green.svg)](https://github.com/jontykuan/Ariadns/releases)
+[![CI](https://github.com/jontykuan/Ariadns/actions/workflows/ci.yml/badge.svg)](https://github.com/jontykuan/Ariadns/actions)
+
 **Ariadns** 是一套本地優先（Local-First）的網域開源情報（OSINT）探測、因果證據鏈推導與法規調閱機關對應工具。支援命令列（CLI）、互動式終端（REPL）、本機網頁操作介面（Web UI）以及 Model Context Protocol（FastMCP）伺服器。
 
 ---
@@ -37,15 +42,42 @@ ariadns doctor
 - **Linux / macOS / WSL**: `bash scripts/install_tools.sh`
 - **Windows (PowerShell)**: `.\scripts\install_tools.ps1`
 
-### 4. 初始化設定檔
+### 4. 初始化設定檔與 API 金鑰說明 (Zero-Key 原生架構)
 ```bash
 ariadns init
 ```
-此指令會由 `config.yaml.example` 複製產生 `config.yaml`，可依需求填入 VirusTotal 等第三方 API Key。
+此指令會由 `config.yaml.example` 複製產生 `config.yaml`。
+
+> **免金鑰架構（Zero-Key Native Architecture）**：  
+> Ariadns **完全無需任何第三方 API Key 即可開箱即用**！內建原生整合：
+> - **BGP / ASN 映射**：Team Cymru (whois/DNS 協定，免費無金鑰)
+> - **子網域枚舉**：crt.sh 憑證透明度紀錄 (免費無金鑰)
+> - **特徵與憑證探測**：原生 TLS/SSL 握手與 HTTP 伺服器指紋擷取
+
+#### 選用第三方情資 API 金鑰清單
+若需擴充長週期歷史 Passive DNS 解析、IP 歷史反查或 HTML 代碼 Token 關聯，可於 `config.yaml` 填入選用金鑰：
+
+| 服務名稱 | 設定鍵名 (`config.yaml`) | 主要調查用途 | 免費額度與申請連結 |
+| :--- | :--- | :--- | :--- |
+| **VirusTotal** | `virustotal` | 歷史解析記錄、惡意樣本與網域標籤關聯 | 4 次/分，500 次/天 ([申請連結](https://www.virustotal.com/gui/join-us)) |
+| **AlienVault OTX** | `alienvault_otx` | 威脅情資交換、被動 DNS 與關聯脈衝 (Pulses) | 免費社群版，無嚴格每分鐘限制 ([申請連結](https://otx.alienvault.com/)) |
+| **SecurityTrails** | `securitytrails` | 權威歷史 DNS 與全量子網域歷程反查 | 免費 50 次月查詢 ([申請連結](https://securitytrails.com/)) |
+| **WhoisXML API** | `whoisxml` | 歷史 WHOIS 資料比對與精確註冊人關聯 | 免費 500 次初始點數 ([申請連結](https://whoisxmlapi.com/)) |
+| **ViewDNS.info** | `viewdns` | 反向 IP、反向 NS 與反向 MX 歷史交叉比對 | 免費 250 次查詢 ([申請連結](https://viewdns.info/)) |
+| **HackerTarget** | `hackertarget` | 輕量外部反查與主機探測管道 | 免費 50 次/天 IP 反查 ([申請連結](https://hackertarget.com/)) |
+| **PublicWWW** | `publicwww` | 網頁源碼特徵與 Snippet Token 追蹤 | 免費查詢與代碼比對 ([申請連結](https://publicwww.com/)) |
 
 ---
 
 ## 二、操作說明（CLI / Web UI / REPL）
+
+### 0. 輔助說明指令
+可隨時透過以下指令查看完整子指令說明與 API 設定提示：
+```bash
+ariadns help
+ariadns /h
+ariadns --help
+```
 
 ### 1. 一鍵全流程掃描（CLI）
 
@@ -157,7 +189,7 @@ ariadns repl
 - `nodes`：列出目前已記錄的所有節點。
 - `l2`：列出反查發現之關聯二級網域與信度評分。
 - `expand <l2_domain>`：對指定關聯網域執行深度展開。
-- `help` / `exit`：顯示說明或離開。
+- `help` / `/h` / `?` / `exit`：顯示說明或離開。
 
 ### 5. 輸出檔案說明
 案件輸出預設存放於 `./reports/<domain>/`（或 `./reports/`）：
@@ -237,14 +269,37 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-### Environment Check & Configuration
+### Environment Check & API Configuration (Zero-Key Architecture)
 ```bash
 # Check optional external binaries (subfinder, httpx, nmap)
 ariadns doctor
 
 # Create config.yaml from config.yaml.example
 ariadns init
+
+# Display help and subcommands
+ariadns help
+ariadns /h
 ```
+
+> **Zero-Key Architecture**:  
+> Ariadns works **100% out-of-the-box without any external API keys**. Native engines include:
+> - **BGP / ASN Mapping**: Team Cymru (DNS/whois protocol, free, keyless)
+> - **Subdomain Enumeration**: crt.sh Certificate Transparency logs (free, keyless)
+> - **Probers**: Local DNS recursive resolution, TLS certificate inspection, and HTTP header fingerprinters.
+
+#### Optional Third-Party Threat Intelligence Keys
+For historical passive DNS, reverse IP pivot history, or HTML snippet tracking, configure optional keys in `config.yaml`:
+
+| Service | Key in `config.yaml` | Investigation Role | Free Quota & Signup |
+| :--- | :--- | :--- | :--- |
+| **VirusTotal** | `virustotal` | Historical resolutions, malicious telemetry, and domain tags | 4 req/min, 500 req/day ([Sign up](https://www.virustotal.com/gui/join-us)) |
+| **AlienVault OTX** | `alienvault_otx` | Threat intelligence community pulses and passive DNS | Free community tier ([Sign up](https://otx.alienvault.com/)) |
+| **SecurityTrails** | `securitytrails` | Historical DNS records and comprehensive subdomain index | 50 queries/month ([Sign up](https://securitytrails.com/)) |
+| **WhoisXML API** | `whoisxml` | Historical WHOIS records and registrant pivot tracking | 500 initial queries ([Sign up](https://whoisxmlapi.com/)) |
+| **ViewDNS.info** | `viewdns` | Reverse IP, reverse NS, and reverse MX lookups | 250 queries ([Sign up](https://viewdns.info/)) |
+| **HackerTarget** | `hackertarget` | Lightweight external reverse IP lookup | 50 lookups/day ([Sign up](https://hackertarget.com/)) |
+| **PublicWWW** | `publicwww` | Source code and HTML token pivot discovery | Free tier search & code matching ([Sign up](https://publicwww.com/)) |
 
 ---
 
@@ -313,7 +368,7 @@ ariadns ui --host 127.0.0.1 --port 8000 --open-browser
 ```bash
 ariadns repl
 ```
-Commands: `target <domain>`, `scan [depth]`, `nodes`, `l2`, `expand <domain>`, `help`, `exit`.
+Commands: `target <domain>`, `scan [depth]`, `nodes`, `l2`, `expand <domain>`, `help`, `/h`, `?`, `exit`.
 
 ---
 
@@ -346,5 +401,13 @@ Available tools: `osint_scan`, `osint_inspect`, `osint_run_step`, `osint_trace`,
 
 ---
 
-## 7. License
-MIT License.
+## 7. License & Disclaimers
+
+### License
+Released under the [MIT License](LICENSE).
+
+### AI-Assisted Development Notice & Disclaimer (AI 輔助生成與開發聲明)
+This project was developed with the assistance of artificial intelligence systems (including Google Antigravity and autonomous agent orchestration pipelines). All architecture, business logic, and code slices undergo human verification and strict automated Test-Driven Development (TDD) gates.
+
+**Legal & Operational Disclaimer**:
+Ariadns is designed solely for legitimate domain intelligence, cybersecurity defense, digital forensics, and academic research. Users are strictly responsible for adhering to applicable local and international laws when conducting network scans. The authors and contributors assume no liability for misuse.

@@ -30,3 +30,4 @@ DESIGN.md
 
 # Test suite (untracked for production release)
 tests/
+scratch/

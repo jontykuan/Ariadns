@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ariadns"
-version = "1.0.3"
+version = "1.0.4"
 description = "Automated Domain OSINT & Pivoting Engine (Forensic Workbench)"
 authors = [{ name = "Ariadns Team" }]
 readme = "README.md"

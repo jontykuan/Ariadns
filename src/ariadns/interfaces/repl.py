@@ -30,13 +30,14 @@ def start_repl(initial_domain: Optional[str] = None) -> int:
             if cmd in ("exit", "quit", "q"):
                 print("[*] Exiting REPL.")
                 break
-            elif cmd == "help":
+            elif cmd in ("help", "/h", "?", "h"):
                 print("Commands:")
                 print("  target <domain>    Set active domain")
                 print("  scan [depth]       Run investigation (depth 1 or 2)")
                 print("  nodes              List discovered graph nodes")
                 print("  l2                 List L2 candidate domains")
                 print("  expand <domain>    Deep probe a specific L2 domain")
+                print("  help, /h, ?        Display this command reference")
                 print("  exit               Quit console")
             elif cmd == "target":
                 if len(parts) > 1:
