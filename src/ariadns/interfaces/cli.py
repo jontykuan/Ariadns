@@ -32,8 +32,18 @@ def build_parser() -> argparse.ArgumentParser:
     # Command: step (stepwise module execution)
     step_parser = subparsers.add_parser("step", help="Run a single module stepwise against a case session")
     step_parser.add_argument("-d", "--domain", required=True, help="Case session domain")
-    step_parser.add_argument("-m", "--module", required=True, choices=["m1", "m2", "m3", "m4", "m7"], help="Module to execute")
+    step_parser.add_argument("-m", "--module", required=True, choices=["m1", "m2", "m3", "m4", "m7", "trace"], help="Module to execute")
     step_parser.add_argument("--target", help="Specific target entity (defaults to session domain)")
+
+    # Command: trace (active route hop tracer)
+    trace_parser = subparsers.add_parser("trace", help="Run active route hop tracer (Requires --ack-risk)")
+    trace_parser.add_argument("-d", "--domain", required=True, help="Case session domain")
+    trace_parser.add_argument("--target", help="Target IP or domain to trace (defaults to session domain)")
+    trace_parser.add_argument("--resolve-dns", action="store_true", help="Disable -d flag and allow OS reverse DNS during trace")
+    trace_parser.add_argument("-H", "--max-hops", type=int, default=20, help="Maximum hops (-h, default: 20)")
+    trace_parser.add_argument("-w", "--timeout", type=int, default=500, help="Timeout per hop in ms (-w, default: 500)")
+    trace_parser.add_argument("--tail-hops", type=int, default=3, help="Number of last responsive hops to retain (default: 3)")
+    trace_parser.add_argument("--ack-risk", action="store_true", help="Acknowledge OPSEC active probing risk")
 
     # Command: recommend (next-step recommendations)
     rec_parser = subparsers.add_parser("recommend", help="Get rule-based next-step investigation recommendations")
@@ -210,6 +220,38 @@ def execute_manual_oob(target_url: str, callback_url: str, param: str, method: s
     print(f"    Note: {res.get('note')}")
     return 0
 
+def execute_trace(
+    domain: str,
+    target: Optional[str],
+    no_rdns: bool,
+    max_hops: int,
+    timeout_ms: int,
+    tail_hops: int,
+    ack_risk: bool,
+) -> int:
+    from ariadns.modules.m9_traceroute import TRACE_OPSEC_WARNING
+    if not ack_risk:
+        print(f"[-] {TRACE_OPSEC_WARNING}")
+        return 1
+    orchestrator = Orchestrator()
+    step_target = target or domain
+    entry = orchestrator.run_step(
+        session_id=domain,
+        module_name="trace",
+        target=step_target,
+        params={
+            "no_rdns": no_rdns,
+            "max_hops": max_hops,
+            "timeout_ms": timeout_ms,
+            "tail_hops": tail_hops,
+            "ack_opsec": True,
+        },
+    )
+    print(f"[+] Route hop trace completed on {step_target} (Session: {domain})")
+    print(f"    - Added Facts: {entry.added_fact_ids}")
+    print(f"    - State Hash:  {entry.artifact_sha256}")
+    return 0
+
 def execute_ui(host: str, port: int, db_path: Optional[str], output_dir: str, open_browser: bool) -> int:
     from ariadns.interfaces.web_ui import start_web_ui
     server = start_web_ui(host=host, port=port, db_path=db_path, output_dir=output_dir, open_browser=open_browser)
@@ -275,6 +317,16 @@ def main(args: list[str] | None = None) -> int:
             callback_url=parsed.callback_url,
             param=parsed.param,
             method=parsed.method,
+            ack_risk=parsed.ack_risk,
+        )
+    elif parsed.command == "trace":
+        return execute_trace(
+            domain=parsed.domain,
+            target=parsed.target,
+            no_rdns=not parsed.resolve_dns,
+            max_hops=parsed.max_hops,
+            timeout_ms=parsed.timeout,
+            tail_hops=parsed.tail_hops,
             ack_risk=parsed.ack_risk,
         )
     elif parsed.command == "doctor":

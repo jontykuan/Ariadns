@@ -28,6 +28,7 @@ from ariadns.modules.m1_local_probe import LocalDnsResolver
 from ariadns.modules.m2_subdomain import SubdomainEnumerator
 from ariadns.modules.m3_origin import OriginDetector
 from ariadns.modules.m4_pivoting import PivotingEngine
+from ariadns.modules.m9_traceroute import run_active_trace
 from ariadns.storage.db import DatabaseManager
 from ariadns.storage.evidence_dag import EvidenceChainDAG, map_custodians_for_node
 from ariadns.storage.graph_store import PropertyGraphStore
@@ -551,6 +552,94 @@ class Orchestrator:
                 if parent_prop_id:
                     new_edges.append((parent_prop_id, f_id))
                 added_fact_ids.append(f_id)
+
+        elif module_name in ("trace", "m9"):
+            ack_opsec = bool(params.get("ack_opsec", False))
+            if not ack_opsec:
+                raise ValueError("OPSEC authorization required (ack_opsec=True) to execute active route trace.")
+            no_rdns = bool(params.get("no_rdns", True))
+            max_hops = int(params.get("max_hops", 20))
+            timeout_ms = int(params.get("timeout_ms", 500))
+            tail_hops = int(params.get("tail_hops", 3))
+
+            trace_target = target
+            if not is_ip_target:
+                ip_regex = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+                for p in existing_props:
+                    if p.target_entity == target or p.prop_id == "F1":
+                        found = ip_regex.findall(p.statement)
+                        if found:
+                            trace_target = found[0]
+                            break
+
+            trace_res = run_active_trace(
+                target=trace_target,
+                no_rdns=no_rdns,
+                max_hops=max_hops,
+                timeout_ms=timeout_ms,
+                tail_hops=tail_hops,
+                ack_opsec=True,
+            )
+            hops_list = trace_res.get("tail_hops", [])
+            if hops_list:
+                hop_summaries = [
+                    f"Hop#{h['hop']}:{h['ip']}({h.get('asn') or 'AS?'}/{h.get('ptr') or h.get('asn_org_name') or 'Router'})"
+                    for h in hops_list
+                ]
+                hops_str = " -> ".join(hop_summaries)
+                last_hop = hops_list[-1]
+                upstream_org = last_hop.get("asn_org_name") or last_hop.get("asn") or ("上游電信路由機房" if is_zh else "Upstream Transit ISP")
+
+                f_trace_id = "F_TRACE"
+                c_trace_id = "C_TRACE"
+                parent_premises: list[str] = []
+                for p in existing_props:
+                    if p.target_entity == trace_target or trace_target in p.statement:
+                        parent_premises.append(p.prop_id)
+                        break
+
+                stmt_f = (
+                    f"路由躍遷追蹤（末 {len(hops_list)} 跳）至 {trace_target}: {hops_str}"
+                    if is_zh else
+                    f"Route hop trace (last {len(hops_list)} hops) to {trace_target}: {hops_str}"
+                )
+                f_node = PropositionNode(
+                    prop_id=f_trace_id,
+                    node_kind=PropositionKind.FACT.value,
+                    rank=1 if parent_premises else 0,
+                    statement=stmt_f,
+                    premises=parent_premises,
+                    rule_name="RULE_ACTIVE_TRACEROUTE",
+                    target_entity=trace_target,
+                    entity_type="IP"
+                )
+                stmt_c = (
+                    f"路由躍遷確認 {trace_target} 之上游實體接入機房與骨幹電信商為 {upstream_org}"
+                    if is_zh else
+                    f"Upstream transit and physical colocation provider for {trace_target} confirmed via route trace: {upstream_org}"
+                )
+                trace_custodians = map_custodians_for_node("IP", last_hop["ip"], {
+                    "is_cdn": False,
+                    "asn": last_hop.get("asn"),
+                    "asn_org_name": upstream_org,
+                    "lang": lang,
+                })
+                c_node = PropositionNode(
+                    prop_id=c_trace_id,
+                    node_kind=PropositionKind.CONCLUSION.value,
+                    rank=2,
+                    statement=stmt_c,
+                    premises=[f_trace_id],
+                    rule_name="RULE_ACTIVE_TRACEROUTE",
+                    target_entity=last_hop["ip"],
+                    entity_type="IP",
+                    custodians=trace_custodians
+                )
+                new_props.extend([f_node, c_node])
+                for pp in parent_premises:
+                    new_edges.append((pp, f_trace_id))
+                new_edges.append((f_trace_id, c_trace_id))
+                added_fact_ids.append(f_trace_id)
 
         # Save merged propositions without overwriting previous steps
         self.db.save_normalized_evidence(session_id, new_props, new_edges, replace=False)

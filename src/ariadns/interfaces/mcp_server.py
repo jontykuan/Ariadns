@@ -328,6 +328,49 @@ def osint_manual_oob(
     )
 
 @mcp.tool()
+def osint_trace(
+    session_id: str,
+    target: str = "",
+    no_rdns: bool = True,
+    max_hops: int = 20,
+    timeout_ms: int = 500,
+    tail_hops: int = 3,
+    acknowledge_opsec_risk: bool = False
+) -> dict[str, Any]:
+    """Execute active route hop tracer (tracert) and enrich last N hops with ASN & PTR. Mandatory: Requires acknowledge_opsec_risk=True."""
+    from ariadns.modules.m9_traceroute import TRACE_OPSEC_WARNING
+    if not acknowledge_opsec_risk:
+        return {
+            "status": "SKIPPED_OPSEC",
+            "warning": TRACE_OPSEC_WARNING,
+            "executed": False,
+            "error": "OPSEC authorization required (acknowledge_opsec_risk=True).",
+        }
+    orchestrator = get_orchestrator()
+    clean_session = session_id.strip().lower()
+    actual_target = (target or clean_session).strip().lower()
+    entry = orchestrator.run_step(
+        session_id=clean_session,
+        module_name="trace",
+        target=actual_target,
+        params={
+            "no_rdns": no_rdns,
+            "max_hops": max_hops,
+            "timeout_ms": timeout_ms,
+            "tail_hops": tail_hops,
+            "ack_opsec": True,
+        }
+    )
+    return {
+        "status": "OK",
+        "session_id": clean_session,
+        "target": actual_target,
+        "step_seq": entry.step_seq,
+        "added_fact_ids": entry.added_fact_ids,
+        "artifact_sha256": entry.artifact_sha256,
+    }
+
+@mcp.tool()
 def osint_report(
     domain: str,
     output_dir: str = "./reports"
