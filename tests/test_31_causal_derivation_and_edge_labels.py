@@ -235,3 +235,24 @@ def test_ticket_37_svg_edge_method_pills_and_node_badges(tmp_path):
     assert "M9:路由追蹤" in svg_content
     assert "鑑識調閱" in svg_content
 
+
+def test_ui_v102_prop_rec_swap_and_batch_execution():
+    tpl_path = Path(__file__).parent.parent / "src" / "ariadns" / "interfaces" / "templates" / "workbench.html"
+    html = tpl_path.read_text(encoding="utf-8")
+
+    # 1. Proposition section ("證據節點") appears BEFORE Recommendation section ("建議下一步") in DOM
+    prop_idx = html.index('id="txtPropTitle"')
+    rec_idx = html.index('id="txtRecTitle"')
+    assert prop_idx < rec_idx, "證據節點 must appear above 建議下一步 in left sidebar"
+
+    # 2. Recommendation header has (n/MAX)項建議 format and 批次執行 button
+    assert 'id="btnBatchRunRecs"' in html
+    assert "batchRunRecommendations()" in html
+    assert "(0/0)項建議" in html
+    assert "批次執行" in html
+
+    # 3. Each recommendation option renders a checkbox after REC_* badge
+    assert 'class="rec-check"' in html
+    assert "updateRecSelectionCount()" in html
+
+

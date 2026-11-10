@@ -308,13 +308,11 @@
     .prop-section {
       display: flex;
       flex-direction: column;
-      flex: 1;
-      min-height: 240px;
+      min-height: 180px;
     }
 
     .prop-list {
-      flex: 1;
-      max-height: 420px;
+      max-height: 280px;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
@@ -707,18 +705,7 @@
         </div>
       </div>
 
-      <!-- Section 2: Next-Step Recommendations -->
-      <div>
-        <div class="section-title">
-          <span id="txtRecTitle">建議下一步</span>
-          <span id="recCount" style="font-family: var(--font-mono); font-size: 12px;">0 項建議</span>
-        </div>
-        <div id="recContainer" style="display: flex; flex-direction: column; gap: 8px;">
-          <div class="empty-state" id="txtRecEmpty" style="padding: 10px;">目前無待處理的建議項目。輸入網域後即可開始。</div>
-        </div>
-      </div>
-
-      <!-- Section 3: Node Selection & Graph Rendering -->
+      <!-- Section 2: Node Selection & Graph Rendering -->
       <div class="prop-section">
         <div class="section-title">
           <span id="txtPropTitle">證據節點</span>
@@ -741,6 +728,20 @@
           <button type="button" class="btn btn-accent" id="btnRenderGraph" onclick="renderEvidenceGraph()">
             生成證據結構圖
           </button>
+        </div>
+      </div>
+
+      <!-- Section 3: Next-Step Recommendations -->
+      <div>
+        <div class="section-title">
+          <span id="txtRecTitle">建議下一步</span>
+          <div style="display: flex; align-items: center; gap: 8px; text-transform: none;">
+            <span id="recCount" style="font-family: var(--font-mono); font-size: 12px;">(0/0)項建議</span>
+            <button type="button" class="btn btn-primary" id="btnBatchRunRecs" onclick="batchRunRecommendations()">批次執行</button>
+          </div>
+        </div>
+        <div id="recContainer" style="display: flex; flex-direction: column; gap: 8px;">
+          <div class="empty-state" id="txtRecEmpty" style="padding: 10px;">目前無待處理的建議項目。輸入網域後即可開始。</div>
         </div>
       </div>
     </aside>
@@ -1001,6 +1002,7 @@
         // Recommendations
         recTitle: "建議下一步",
         recActive: "項建議",
+        recBatchBtn: "批次執行",
         recEmpty: "目前無待處理的建議項目。輸入網域後即可開始。",
         recApplyBtn: "套用並執行",
 
@@ -1125,7 +1127,8 @@
 
         // Recommendations
         recTitle: "Next-Step Recommendations",
-        recActive: "active",
+        recActive: " active",
+        recBatchBtn: "Batch Run",
         recEmpty: "No pending recommendations. Enter domain and load session.",
         recApplyBtn: "Apply & Run",
 
@@ -1273,9 +1276,13 @@
 
       // Recommendations
       document.getElementById("txtRecTitle").textContent = t.recTitle;
+      if (document.getElementById("btnBatchRunRecs")) {
+        document.getElementById("btnBatchRunRecs").textContent = t.recBatchBtn;
+      }
       if (document.getElementById("txtRecEmpty")) {
         document.getElementById("txtRecEmpty").textContent = t.recEmpty;
       }
+      updateRecSelectionCount();
 
       // Propositions
       document.getElementById("txtPropTitle").textContent = t.propTitle;
@@ -1552,7 +1559,7 @@
       // Reset Recommendations
       const recContainer = document.getElementById("recContainer");
       const recCount = document.getElementById("recCount");
-      if (recCount) recCount.textContent = `0 ${t.recActive}`;
+      if (recCount) recCount.textContent = `(0/0)${t.recActive}`;
       if (recContainer) {
         recContainer.innerHTML = `<div class="empty-state" id="txtRecEmpty" style="padding: 10px;">${t.recEmpty}</div>`;
       }
@@ -1658,7 +1665,6 @@
       const recs = (currentTargetScope === "ALL")
         ? allRecs
         : allRecs.filter(r => r.recommended_target.toLowerCase() === currentTargetScope.toLowerCase());
-      document.getElementById("recCount").textContent = `${recs.length} ${t.recActive}`;
 
       if (recs.length === 0) {
         recContainer.innerHTML = `<div class="empty-state" id="txtRecEmpty" style="padding: 10px;">${t.recEmpty}</div>`;
@@ -1668,7 +1674,10 @@
           card.className = "rec-card";
           card.innerHTML = `
             <div class="rec-header">
-              <span class="rec-badge">${r.rec_id}</span>
+              <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+                <span class="rec-badge">${r.rec_id}</span>
+                <input type="checkbox" class="rec-check" value="${r.rec_id}" data-module="${r.recommended_module}" data-target="${r.recommended_target}" onchange="updateRecSelectionCount()" checked>
+              </label>
               <span style="color: var(--text-muted);">${r.recommended_module.toUpperCase()} &rarr; ${r.recommended_target}</span>
             </div>
             <div class="rec-body">${r.rationale}</div>
@@ -1679,6 +1688,7 @@
           recContainer.appendChild(card);
         });
       }
+      updateRecSelectionCount();
 
       // Audit Table
       const auditBody = document.getElementById("auditTableBody");
@@ -1801,6 +1811,66 @@
     async function confirmAndRunM7() {
       closeM7Modal();
       await runStep("m7", undefined, { ack_opsec: true, acknowledge_risk: true });
+    }
+
+    function updateRecSelectionCount() {
+      const t = TRANSLATIONS[currentLang];
+      const allChecks = document.querySelectorAll(".rec-check");
+      const checkedChecks = document.querySelectorAll(".rec-check:checked");
+      const recCountEl = document.getElementById("recCount");
+      if (recCountEl) {
+        recCountEl.textContent = `(${checkedChecks.length}/${allChecks.length})${t.recActive}`;
+      }
+      const btnBatch = document.getElementById("btnBatchRunRecs");
+      if (btnBatch) {
+        btnBatch.disabled = (checkedChecks.length === 0);
+      }
+    }
+
+    async function batchRunRecommendations() {
+      const t = TRANSLATIONS[currentLang];
+      const actualTarget = currentSession || document.getElementById("domainInput").value.trim();
+      if (!actualTarget) {
+        alert(t.enterDomainAlert);
+        return;
+      }
+      const checkedChecks = Array.from(document.querySelectorAll(".rec-check:checked"));
+      if (checkedChecks.length === 0) {
+        return;
+      }
+
+      const btn = document.getElementById("btnBatchRunRecs");
+      if (btn) btn.disabled = true;
+
+      startStopwatch();
+      try {
+        for (const cb of checkedChecks) {
+          const mod = cb.getAttribute("data-module");
+          const tgt = cb.getAttribute("data-target") || actualTarget;
+          document.getElementById("indModule").textContent = mod.toUpperCase();
+          document.getElementById("indProgress").textContent = t.runningStatus;
+          document.getElementById("indTarget").textContent = tgt;
+          await fetch("/api/step", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              session_id: currentSession,
+              module: mod,
+              target: tgt,
+              params: { depth: parseInt(currentDepth, 10) || 1, lang: currentLang }
+            })
+          });
+        }
+        stopStopwatch();
+        document.getElementById("indProgress").textContent = t.doneStatus;
+        await loadSession(true);
+      } catch (err) {
+        stopStopwatch();
+        document.getElementById("indProgress").textContent = "FAILED";
+        console.error("Batch recommendation execution error:", err);
+      } finally {
+        updateRecSelectionCount();
+      }
     }
 
     async function autoRunSteps() {
