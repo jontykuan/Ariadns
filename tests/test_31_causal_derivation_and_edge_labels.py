@@ -218,13 +218,19 @@ def test_ticket_37_svg_edge_method_pills_and_node_badges(tmp_path):
     )
     svg_content = svg_path.read_text(encoding="utf-8")
 
-    # 1. Edge midpoint pills present
+    # 1. Edge midpoint pills present for investigative methods, but "事實推導 ➔ 調閱結論" is removed
     assert "A紀錄 ➔ ASN歸屬探測" in svg_content
     assert "子網域枚舉" in svg_content
     assert "來源碰撞探測" in svg_content
     assert "橫向共構轉向" in svg_content
     assert "路由躍遷追蹤" in svg_content
-    assert "事實推導 ➔ 調閱結論" in svg_content
+    assert "事實推導 ➔ 調閱結論" not in svg_content
+
+    # 1b. 【依據】, 【方法】, 【結果】 must each start on their own <text> line inside nodes
+    import re
+    for text_line in re.findall(r"<text[^>]*>(.*?)</text>", svg_content):
+        assert not ("【依據】" in text_line and "【方法】" in text_line), f"依據 and 方法 on same line: {text_line}"
+        assert not ("【方法】" in text_line and "【結果】" in text_line), f"方法 and 結果 on same line: {text_line}"
 
     # 2. Node method badges present in headers
     assert "M1:DNS探測" in svg_content

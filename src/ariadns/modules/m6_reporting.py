@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 import textwrap
 from pathlib import Path
 from typing import Any, Optional
@@ -15,6 +16,34 @@ from ariadns.models.entities import ArtifactManifest, InvestigationResult, Propo
 from ariadns.storage.db import DatabaseManager
 from ariadns.storage.evidence_dag import EvidenceChainDAG
 from ariadns.storage.graph_store import PropertyGraphStore
+
+
+def _wrap_statement_lines(statement: str, max_visual_width: int = 50, max_lines: int = 5) -> list[str]:
+    """Split statement on 【依據】/【方法】/【結果】 (or [Source]/[Method]/[Result]) onto separate lines and wrap by CJK-aware visual width."""
+    segments = [
+        s.strip()
+        for s in re.split(r"\s*(?=【依據】|【方法】|【結果】|\[Source\]|\[Method\]|\[Result\])", statement.strip())
+        if s.strip()
+    ]
+    if not segments:
+        return [statement]
+
+    lines: list[str] = []
+    for seg in segments:
+        cur_line = ""
+        cur_width = 0
+        for ch in seg:
+            ch_w = 2 if ord(ch) > 127 else 1
+            if cur_width + ch_w > max_visual_width and cur_line:
+                lines.append(cur_line)
+                cur_line = "  " + ch
+                cur_width = 2 + ch_w
+            else:
+                cur_line += ch
+                cur_width += ch_w
+        if cur_line:
+            lines.append(cur_line)
+    return lines[:max_lines]
 
 def compute_file_sha256(path: Path) -> str:
     if not path.exists():
@@ -76,13 +105,23 @@ def render_evidence_artifacts(
     payload_sha256 = hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()
 
     # Layout computation for deterministic coordinates with 4:3 ~ 16:9 aspect ratio balance
+    eff_ranks: dict[str, int] = {p.prop_id: p.rank for p in rendered_props}
+    for _ in range(len(rendered_props) + 1):
+        changed = False
+        for u, v in rendered_edges:
+            if u in eff_ranks and v in eff_ranks and eff_ranks[v] <= eff_ranks[u]:
+                eff_ranks[v] = eff_ranks[u] + 1
+                changed = True
+        if not changed:
+            break
+
     rank_groups: dict[int, list[PropositionNode]] = {}
     for p in rendered_props:
-        rank_groups.setdefault(p.rank, []).append(p)
+        rank_groups.setdefault(eff_ranks[p.prop_id], []).append(p)
 
     ranks = sorted(rank_groups.keys())
     box_w = 340
-    box_h = 110
+    box_h = 132
     h_gap = 44
     base_v_gap = 120
     pad_x = 70
@@ -152,10 +191,11 @@ def render_evidence_artifacts(
 
     def _derive_edge_label(u_id: str, v_id: str, lang: str = "zh") -> str:
         is_zh = (lang == "zh")
-        u_node = prop_lookup.get(u_id)
         v_node = prop_lookup.get(v_id)
         v_pid = v_id.upper()
 
+        if v_node and (v_node.node_kind == "CONCLUSION" or v_node.custodians):
+            return ""
         if "TRACE" in v_pid or (v_node and v_node.rule_name == "RULE_ACTIVE_TRACEROUTE"):
             return "路由躍遷追蹤" if is_zh else "Route Hop Trace"
         if "OOB" in v_pid or (v_node and v_node.rule_name == "RULE_ACTIVE_OOB_PROBE"):
@@ -168,9 +208,7 @@ def render_evidence_artifacts(
             return "橫向共構轉向" if is_zh else "Pivot Correlation"
         if "F1" in v_pid and ("F1" in u_id or u_id == "F1"):
             return "A紀錄 ➔ ASN歸屬探測" if is_zh else "A Rec ➔ ASN Probe"
-        if v_node and (v_node.node_kind == "CONCLUSION" or v_node.custodians):
-            return "事實推導 ➔ 調閱結論" if is_zh else "Fact ➔ Custodian Conclusion"
-        return "因果推導" if is_zh else "Deduction"
+        return ""
 
     def _derive_node_method_badge(node: PropositionNode, lang: str = "zh") -> str:
         is_zh = (lang == "zh")
@@ -218,19 +256,20 @@ def render_evidence_artifacts(
             edge_lbl = _derive_edge_label(u, v, lang=lang)
             svg_lines.append(f'  <line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{e_color}" stroke-width="2"{e_dash} marker-end="url(#arrow)"/>')
 
-            # Midpoint pill badge
-            mx = (x1 + x2) // 2
-            my = (y1 + y2) // 2
-            pill_w = max(76, len(edge_lbl) * 12 + 18)
-            pill_h = 20
-            px = mx - pill_w // 2
-            py = my - pill_h // 2
-            svg_lines.extend([
-                f'  <rect x="{px}" y="{py}" width="{pill_w}" height="{pill_h}" rx="4" fill="#0b1329" stroke="{e_color}" stroke-width="1.2"/>',
-                f'  <text x="{mx}" y="{my + 4}" fill="#cbd5e1" font-size="10" font-weight="bold" text-anchor="middle">{edge_lbl}</text>'
-            ])
+            # Midpoint pill badge (only when edge_lbl is non-empty)
+            if edge_lbl:
+                mx = (x1 + x2) // 2
+                my = (y1 + y2) // 2
+                pill_w = max(76, len(edge_lbl) * 12 + 18)
+                pill_h = 20
+                px = mx - pill_w // 2
+                py = my - pill_h // 2
+                svg_lines.extend([
+                    f'  <rect x="{px}" y="{py}" width="{pill_w}" height="{pill_h}" rx="4" fill="#0b1329" stroke="{e_color}" stroke-width="1.2"/>',
+                    f'  <text x="{mx}" y="{my + 4}" fill="#cbd5e1" font-size="10" font-weight="bold" text-anchor="middle">{edge_lbl}</text>'
+                ])
 
-    # Draw nodes with multi-line wrapped statements (no premature 32-char truncation)
+    # Draw nodes with multi-line wrapped statements (依據 / 方法 / 結果 on separate lines)
     for p in rendered_props:
         x, y = positions[p.prop_id]
         is_fact = (p.node_kind == "FACT")
@@ -238,9 +277,7 @@ def render_evidence_artifacts(
         badge = "FACT" if is_fact else "CONCLUSION"
         method_badge = _derive_node_method_badge(p, lang=lang)
 
-        wrapped_lines = textwrap.wrap(p.statement, width=42)[:4]
-        if not wrapped_lines:
-            wrapped_lines = [p.statement]
+        wrapped_lines = _wrap_statement_lines(p.statement, max_visual_width=50, max_lines=5)
 
         svg_lines.extend([
             f'  <rect x="{x}" y="{y}" width="{box_w}" height="{box_h}" rx="6" fill="#1e293b" stroke="{stroke_color}" stroke-width="2"/>',
@@ -310,12 +347,13 @@ def render_evidence_artifacts(
                 e_color, _ = _classify_edge_style(u, v)
                 draw.line([(x1, y1), (x2, y2)], fill=e_color, width=2)
                 edge_lbl = _derive_edge_label(u, v, lang=lang)
-                mx = (x1 + x2) // 2
-                my = (y1 + y2) // 2
-                pill_w = max(76, len(edge_lbl) * 11 + 16)
-                pill_h = 18
-                draw.rounded_rectangle([mx - pill_w // 2, my - pill_h // 2, mx + pill_w // 2, my + pill_h // 2], radius=4, fill="#0b1329", outline=e_color, width=1)
-                draw.text((mx - pill_w // 2 + 6, my - 6), edge_lbl, fill="#cbd5e1")
+                if edge_lbl:
+                    mx = (x1 + x2) // 2
+                    my = (y1 + y2) // 2
+                    pill_w = max(76, len(edge_lbl) * 11 + 16)
+                    pill_h = 18
+                    draw.rounded_rectangle([mx - pill_w // 2, my - pill_h // 2, mx + pill_w // 2, my + pill_h // 2], radius=4, fill="#0b1329", outline=e_color, width=1)
+                    draw.text((mx - pill_w // 2 + 6, my - 6), edge_lbl, fill="#cbd5e1")
 
         for p in rendered_props:
             x, y = positions[p.prop_id]
@@ -327,7 +365,7 @@ def render_evidence_artifacts(
             draw.rounded_rectangle([x, y, x + box_w, y + box_h], radius=6, fill="#1e293b", outline=stroke_c, width=2)
             draw.rectangle([x, y, x + box_w, y + 24], fill=header_c)
             draw.text((x + 8, y + 5), f"[{badge}] {p.prop_id} | {method_badge}", fill="#ffffff")
-            wrapped_lines = textwrap.wrap(p.statement, width=42)[:4]
+            wrapped_lines = _wrap_statement_lines(p.statement, max_visual_width=50, max_lines=5)
             for l_idx, w_line in enumerate(wrapped_lines):
                 draw.text((x + 8, y + 32 + l_idx * 16), w_line, fill="#e2e8f0")
 
