@@ -298,19 +298,36 @@ class Orchestrator:
             f2_id = f"{prefix}F2"
             c1_id = f"{prefix}C1"
 
+            parent_p = None
+            if is_secondary:
+                for p in existing_props:
+                    if p.target_entity == target or target in p.statement:
+                        parent_p = p
+                        break
+                if not parent_p:
+                    for p in existing_props:
+                        if p.prop_id == "F1":
+                            parent_p = p
+                            break
+            parent_id = parent_p.prop_id if parent_p else None
+            parent_rank = parent_p.rank if parent_p else 0
+
             if is_ip_target:
                 infra = self.m1.probe_infrastructure(target, [target], run_portscan=params.get("run_portscan", False))
                 asn_label = f"{infra.asn or 'AS_UNKNOWN'} ({infra.asn_org_name or ('網路機房服務商' if is_zh else 'Hosting Provider')})"
+                f1_premises = [parent_id] if parent_id else []
+                f1_rank = (parent_rank + 1) if parent_id else 0
                 stmt_f1 = (
-                    f"主機 IP {target} 歸屬於 {asn_label}，Server 標頭: {infra.server_banner or '未知'}，CDN 代理: {infra.is_cdn}"
+                    f"【依據】{parent_id or target}（解析紀錄包含 {target}） 【方法】Team Cymru BGP/ASN 與 HTTP 標頭探測 【結果】主機 IP {target} 歸屬於 {asn_label}，Server 標頭: {infra.server_banner or '未知'}，CDN 代理: {infra.is_cdn}"
                     if is_zh else
-                    f"Host IP {target} belongs to {asn_label}, Server:{infra.server_banner or 'Unknown'}, CDN:{infra.is_cdn}"
+                    f"[Source] {parent_id or target} (Resolves to {target}) [Method] Team Cymru BGP/ASN & HTTP Banner Probe [Result] Host IP {target} belongs to {asn_label}, Server:{infra.server_banner or 'Unknown'}, CDN:{infra.is_cdn}"
                 )
                 f1 = PropositionNode(
                     prop_id=f1_id,
                     node_kind=PropositionKind.FACT.value,
-                    rank=0,
+                    rank=f1_rank,
                     statement=stmt_f1,
+                    premises=f1_premises,
                     target_entity=target,
                     entity_type="IP"
                 )
@@ -327,15 +344,16 @@ class Orchestrator:
                         c1_premises.append(p.prop_id)
                         new_edges.append((p.prop_id, c1_id))
 
+                c1_rank = f1_rank + 1
                 stmt_c1 = (
-                    f"已確認主機 IP {target} 之網路電信商與機房歸屬（{asn_label}）"
+                    f"【依據】{f1_id} 【方法】因果歸納與資料保管單位映射 【結果】已確認主機 IP {target} 之網路電信商與機房歸屬（{asn_label}）"
                     if is_zh else
-                    f"Active hosting infrastructure and network operator identified for IP {target} ({asn_label})"
+                    f"[Source] {f1_id} [Method] Causal Induction & Custodian Mapping [Result] Active hosting infrastructure and network operator identified for IP {target} ({asn_label})"
                 )
                 c1 = PropositionNode(
                     prop_id=c1_id,
                     node_kind=PropositionKind.CONCLUSION.value,
-                    rank=1,
+                    rank=c1_rank,
                     statement=stmt_c1,
                     premises=c1_premises,
                     rule_name="RULE_DIRECT_OBSERVATION",
@@ -344,6 +362,8 @@ class Orchestrator:
                     custodians=ip_custodians
                 )
                 new_props.extend([f1, c1])
+                if parent_id:
+                    new_edges.append((parent_id, f1_id))
                 new_edges.append((f1_id, c1_id))
                 added_fact_ids.append(f1_id)
             else:
@@ -352,29 +372,34 @@ class Orchestrator:
                 infra = self.m1.probe_infrastructure(target, dns_records.get("A", []), run_portscan=params.get("run_portscan", False))
                 ent_type = "DOMAIN_L2" if is_secondary else "DOMAIN_L1"
 
+                f1_premises = [parent_id] if (is_secondary and parent_id) else []
+                f1_rank = (parent_rank + 1) if (is_secondary and parent_id) else 0
+
                 stmt_f1 = (
-                    f"網域 {target} 解析至 A:{dns_records.get('A', [])}，CDN:{infra.is_cdn} ({infra.cdn_provider or '無'})，Server:{infra.server_banner or '未知'}"
+                    f"【依據】{parent_id or ('調查目標網域 ' + target)} 【方法】本地 DNS 解析與 HTTP 標頭探測 【結果】解析至 A:{dns_records.get('A', [])}，CDN:{infra.is_cdn} ({infra.cdn_provider or '無'})，Server:{infra.server_banner or '未知'}"
                     if is_zh else
-                    f"Domain {target} resolves to A:{dns_records.get('A', [])}, CDN:{infra.is_cdn} ({infra.cdn_provider or 'None'}), Server:{infra.server_banner or 'Unknown'}"
+                    f"[Source] {parent_id or ('Target Domain ' + target)} [Method] Local DNS & HTTP Banner Probe [Result] Resolves to A:{dns_records.get('A', [])}, CDN:{infra.is_cdn} ({infra.cdn_provider or 'None'}), Server:{infra.server_banner or 'Unknown'}"
                 )
                 stmt_f2 = (
-                    f"網域 {target} 註冊商為 '{identity.registrar_name or '未知'}'，SOA 信箱 '{identity.soa_admin_email or '無'}'，驗證標記: {list(identity.verification_tokens.keys())}"
+                    f"【依據】{parent_id or ('調查目標網域 ' + target)} 【方法】RDAP 註冊資訊與 DNS TXT 查詢 【結果】註冊商為 '{identity.registrar_name or '未知'}'，SOA 信箱 '{identity.soa_admin_email or '無'}'，驗證標記: {list(identity.verification_tokens.keys())}"
                     if is_zh else
-                    f"Domain {target} registered via '{identity.registrar_name or 'Unknown'}', SOA Admin '{identity.soa_admin_email or 'N/A'}', Tokens: {list(identity.verification_tokens.keys())}"
+                    f"[Source] {parent_id or ('Target Domain ' + target)} [Method] RDAP Registration & DNS TXT Probe [Result] Registered via '{identity.registrar_name or 'Unknown'}', SOA Admin '{identity.soa_admin_email or 'N/A'}', Tokens: {list(identity.verification_tokens.keys())}"
                 )
                 f1 = PropositionNode(
                     prop_id=f1_id,
                     node_kind=PropositionKind.FACT.value,
-                    rank=0,
+                    rank=f1_rank,
                     statement=stmt_f1,
+                    premises=f1_premises,
                     target_entity=target,
                     entity_type=ent_type
                 )
                 f2 = PropositionNode(
                     prop_id=f2_id,
                     node_kind=PropositionKind.FACT.value,
-                    rank=0,
+                    rank=f1_rank,
                     statement=stmt_f2,
+                    premises=f1_premises,
                     target_entity=target,
                     entity_type=ent_type
                 )
@@ -391,15 +416,16 @@ class Orchestrator:
                         c1_premises.append(p.prop_id)
                         new_edges.append((p.prop_id, c1_id))
 
+                c1_rank = f1_rank + 1
                 stmt_c1 = (
-                    f"已確認網域 {target} 之基礎建設與註冊管理機構（{identity.registrar_name or '未知'}）"
+                    f"【依據】{f1_id}, {f2_id} 【方法】因果歸納與資料保管單位映射 【結果】已確認網域 {target} 之基礎建設與註冊管理機構（{identity.registrar_name or '未知'}）"
                     if is_zh else
-                    f"Active infrastructure and registration authority identified for {target}"
+                    f"[Source] {f1_id}, {f2_id} [Method] Causal Induction & Custodian Mapping [Result] Active infrastructure and registration authority identified for {target}"
                 )
                 c1 = PropositionNode(
                     prop_id=c1_id,
                     node_kind=PropositionKind.CONCLUSION.value,
-                    rank=1,
+                    rank=c1_rank,
                     statement=stmt_c1,
                     premises=c1_premises,
                     rule_name="RULE_DIRECT_OBSERVATION",
@@ -408,43 +434,54 @@ class Orchestrator:
                     custodians=l1_custodians
                 )
                 new_props.extend([f1, f2, c1])
+                if is_secondary and parent_id:
+                    new_edges.extend([(parent_id, f1_id), (parent_id, f2_id)])
                 new_edges.extend([(f1_id, c1_id), (f2_id, c1_id)])
                 added_fact_ids.extend([f1_id, f2_id])
 
         elif module_name == "m2":
             subdomains = self.m2.run(target)
+            parent_p = next((p for p in existing_props if p.prop_id in ("F1", f"{target}_F1")), None)
+            if not parent_p and existing_props:
+                parent_p = existing_props[0]
+            parent_id = parent_p.prop_id if parent_p else None
+            parent_rank = parent_p.rank if parent_p else 0
+
             sub_idx = 1
             for sub in subdomains:
                 if sub.ip:
                     f_id = f"F_SUB_{sub_idx}"
                     stmt_sub = (
-                        f"子網域 {sub.subdomain} 解析至 {sub.ip}（伺服器: {sub.server or '未知'}）"
+                        f"【依據】{parent_id or target}（根網域 {target}） 【方法】被動憑證透明度 (CT) 與 DNS 字典枚舉 【結果】子網域 {sub.subdomain} 解析至 {sub.ip}（伺服器: {sub.server or '未知'}）"
                         if is_zh else
-                        f"Subdomain {sub.subdomain} resolves to {sub.ip} (Server: {sub.server or 'Unknown'})"
+                        f"[Source] {parent_id or target} (Root Domain {target}) [Method] Passive CT Logs & DNS Wordlist Enumeration [Result] Subdomain {sub.subdomain} resolves to {sub.ip} (Server: {sub.server or 'Unknown'})"
                     )
                     f_node = PropositionNode(
                         prop_id=f_id,
                         node_kind=PropositionKind.FACT.value,
-                        rank=0,
+                        rank=parent_rank + 1,
                         statement=stmt_sub,
+                        premises=[parent_id] if parent_id else [],
                         target_entity=sub.subdomain,
                         entity_type="SUBDOMAIN"
                     )
                     new_props.append(f_node)
+                    if parent_id:
+                        new_edges.append((parent_id, f_id))
                     added_fact_ids.append(f_id)
 
                     # If unproxied / non-CDN IP found
                     if "47." in sub.ip or "192." in sub.ip or "10." in sub.ip or not sub.server == "cloudflare":
                         c_id = f"C_UNPROXIED_{sub_idx}"
                         stmt_unp = (
-                            f"透過子網域 {sub.subdomain} 發現未經 CDN 代理之後端真實主機 {sub.ip}"
+                            f"【依據】{f_id} 【方法】IP 特徵比對與非 CDN 源站辨識 【結果】透過子網域 {sub.subdomain} 發現未經 CDN 代理之後端真實主機 {sub.ip}"
                             if is_zh else
-                            f"Unproxied backend origin host detected at {sub.ip} via {sub.subdomain}"
+                            f"[Source] {f_id} [Method] IP Signature & Non-CDN Backend Detection [Result] Unproxied backend origin host detected at {sub.ip} via {sub.subdomain}"
                         )
                         c_node = PropositionNode(
                             prop_id=c_id,
                             node_kind=PropositionKind.CONCLUSION.value,
-                            rank=2,
+                            rank=f_node.rank + 1,
                             statement=stmt_unp,
                             premises=["C1", f_id] if "C1" in existing_prop_ids else [f_id],
                             rule_name="RULE_ORIGIN_CONFIRMATION",
@@ -460,6 +497,12 @@ class Orchestrator:
 
         elif module_name == "m3":
             # Origin detection
+            parent_p = next((p for p in existing_props if p.prop_id in ("F1", f"{target}_F1")), None)
+            if not parent_p and existing_props:
+                parent_p = existing_props[0]
+            parent_id = parent_p.prop_id if parent_p else None
+            parent_rank = parent_p.rank if parent_p else 0
+
             current_ips = params.get("current_ips", [])
             first_ip = current_ips[0] if isinstance(current_ips, list) and current_ips else (current_ips if isinstance(current_ips, str) else None)
             origin_ip, status = self.m3.detect_origin(target, first_ip)
@@ -467,27 +510,28 @@ class Orchestrator:
             if origin_ip:
                 f_id = "F_ORIGIN"
                 stmt_forig = (
-                    f"被動 DNS 與特徵碰撞發現候選真實來源主機 IP {origin_ip}（狀態: {status_val}）"
+                    f"【依據】{parent_id or target}（受保護網域 {target}） 【方法】被動 DNS 歷史紀錄回溯與 HTTP Host / Favicon 碰撞探測 【結果】發現候選真實來源主機 IP {origin_ip}（狀態: {status_val}）"
                     if is_zh else
-                    f"Passive DNS / collision detected candidate origin IP {origin_ip} (Status: {status_val})"
+                    f"[Source] {parent_id or target} (Protected Domain {target}) [Method] Historical pDNS & HTTP Host / Favicon Collision [Result] Passive DNS / collision detected candidate origin IP {origin_ip} (Status: {status_val})"
                 )
                 f_node = PropositionNode(
                     prop_id=f_id,
                     node_kind=PropositionKind.FACT.value,
-                    rank=0,
+                    rank=parent_rank + 1,
                     statement=stmt_forig,
+                    premises=[parent_id] if parent_id else [],
                     target_entity=origin_ip,
                     entity_type="IP"
                 )
                 stmt_corig = (
-                    f"已確認受保護網域 {target} 之候選真實來源伺服器為 {origin_ip}"
+                    f"【依據】{f_id} 【方法】特徵碰撞驗證與來源歸納 【結果】已確認受保護網域 {target} 之候選真實來源伺服器為 {origin_ip}"
                     if is_zh else
-                    f"Candidate Origin Server {origin_ip} confirmed/identified for {target}"
+                    f"[Source] {f_id} [Method] Fingerprint Match & Origin Attribution [Result] Candidate Origin Server {origin_ip} confirmed/identified for {target}"
                 )
                 c_node = PropositionNode(
                     prop_id="C_ORIGIN",
                     node_kind=PropositionKind.CONCLUSION.value,
-                    rank=2,
+                    rank=f_node.rank + 1,
                     statement=stmt_corig,
                     premises=["C1", f_id] if "C1" in existing_prop_ids else [f_id],
                     rule_name="RULE_ORIGIN_CONFIRMATION",
@@ -496,6 +540,8 @@ class Orchestrator:
                     custodians=map_custodians_for_node("IP", origin_ip, {"is_cdn": False, "lang": lang})
                 )
                 new_props.extend([f_node, c_node])
+                if parent_id:
+                    new_edges.append((parent_id, f_id))
                 new_edges.append((f_id, "C_ORIGIN"))
                 if "C1" in existing_prop_ids:
                     new_edges.append(("C1", "C_ORIGIN"))
@@ -506,43 +552,48 @@ class Orchestrator:
             pivot_type = params.get("type", "reverse_ip")
             pivoted: list[str] = []
             pivot_source_target = target
+            parent_prop = None
             if pivot_type == "reverse_ip":
                 if not is_ip_target:
                     # Extract resolved IP from existing propositions for this domain
                     ip_regex = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
-                    found_ips: list[str] = []
                     for p in existing_props:
                         if p.target_entity == target or p.prop_id == "F1":
-                            for m_ip in ip_regex.findall(p.statement):
-                                if m_ip not in found_ips:
-                                    found_ips.append(m_ip)
-                    if found_ips:
-                        pivot_source_target = found_ips[0]
+                            found_ips = ip_regex.findall(p.statement)
+                            if found_ips:
+                                pivot_source_target = found_ips[0]
+                                parent_prop = p
+                                break
                 pivoted = self.m4.reverse_ip(pivot_source_target)
             elif pivot_type == "reverse_mx":
                 pivoted = self.m4.reverse_mx(target)
             elif pivot_type == "reverse_ns":
                 pivoted = self.m4.reverse_ns(target)
 
-            parent_prop_id = None
-            for p in existing_props:
-                if p.target_entity == pivot_source_target or pivot_source_target in p.statement:
-                    parent_prop_id = p.prop_id
-                    break
+            if not parent_prop:
+                for p in existing_props:
+                    if p.target_entity == pivot_source_target or pivot_source_target in p.statement:
+                        parent_prop = p
+                        break
+                if not parent_prop and existing_props:
+                    parent_prop = existing_props[0]
+
+            parent_prop_id = parent_prop.prop_id if parent_prop else None
+            parent_rank = parent_prop.rank if parent_prop else 0
 
             for idx, p_dom in enumerate(pivoted[:10], start=1):
                 if p_dom.lower() == session_id or p_dom.lower() == target:
                     continue
                 f_id = f"F_PIVOT_{idx}"
                 stmt_piv = (
-                    f"由 {pivot_source_target}（{pivot_type}）橫向轉向發現共構關聯網域 {p_dom}"
+                    f"【依據】{parent_prop_id or pivot_source_target}（{pivot_source_target}） 【方法】{pivot_type} 關聯反查與 7 天誤報過濾 【結果】橫向轉向發現共構關聯網域 {p_dom}"
                     if is_zh else
-                    f"Pivoting on {pivot_source_target} ({pivot_type}) discovered correlated domain {p_dom}"
+                    f"[Source] {parent_prop_id or pivot_source_target} ({pivot_source_target}) [Method] {pivot_type} Pivoting with 7-Day Warninglist Filtering [Result] Discovered correlated domain {p_dom}"
                 )
                 f_node = PropositionNode(
                     prop_id=f_id,
                     node_kind=PropositionKind.FACT.value,
-                    rank=1 if parent_prop_id else 0,
+                    rank=parent_rank + 1,
                     statement=stmt_piv,
                     premises=[parent_prop_id] if parent_prop_id else [],
                     target_entity=p_dom,
@@ -563,6 +614,7 @@ class Orchestrator:
             tail_hops = int(params.get("tail_hops", 3))
 
             trace_target = target
+            parent_p = None
             if not is_ip_target:
                 ip_regex = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
                 for p in existing_props:
@@ -570,7 +622,20 @@ class Orchestrator:
                         found = ip_regex.findall(p.statement)
                         if found:
                             trace_target = found[0]
+                            parent_p = p
                             break
+
+            if not parent_p:
+                for p in existing_props:
+                    if p.target_entity == trace_target or trace_target in p.statement:
+                        parent_p = p
+                        break
+            if not parent_p and existing_props:
+                parent_p = existing_props[0]
+
+            parent_id = parent_p.prop_id if parent_p else None
+            parent_rank = parent_p.rank if parent_p else 0
+            parent_premises = [parent_id] if parent_id else []
 
             trace_res = run_active_trace(
                 target=trace_target,
@@ -583,11 +648,6 @@ class Orchestrator:
             hops_list = trace_res.get("tail_hops", [])
             f_trace_id = "F_TRACE"
             c_trace_id = "C_TRACE"
-            parent_premises: list[str] = []
-            for p in existing_props:
-                if p.target_entity == trace_target or trace_target in p.statement:
-                    parent_premises.append(p.prop_id)
-                    break
 
             if hops_list:
                 hop_summaries = [
@@ -599,14 +659,14 @@ class Orchestrator:
                 upstream_org = last_hop.get("asn_org_name") or last_hop.get("asn") or ("上游電信路由機房" if is_zh else "Upstream Transit ISP")
 
                 stmt_f = (
-                    f"路由躍遷追蹤（末 {len(hops_list)} 跳）至 {trace_target}: {hops_str}"
+                    f"【依據】{parent_id or trace_target}（目標 IP {trace_target}） 【方法】tracert 路由躍遷追蹤與 Team Cymru 骨幹 ASN 查詢 【結果】路由躍遷追蹤（末 {len(hops_list)} 跳）至 {trace_target}: {hops_str}"
                     if is_zh else
-                    f"Route hop trace (last {len(hops_list)} hops) to {trace_target}: {hops_str}"
+                    f"[Source] {parent_id or trace_target} (Target IP {trace_target}) [Method] tracert Route Hop Trace & Team Cymru Backbone ASN Lookup [Result] Route hop trace (last {len(hops_list)} hops) to {trace_target}: {hops_str}"
                 )
                 f_node = PropositionNode(
                     prop_id=f_trace_id,
                     node_kind=PropositionKind.FACT.value,
-                    rank=1 if parent_premises else 0,
+                    rank=parent_rank + 1,
                     statement=stmt_f,
                     premises=parent_premises,
                     rule_name="RULE_ACTIVE_TRACEROUTE",
@@ -614,9 +674,9 @@ class Orchestrator:
                     entity_type="IP"
                 )
                 stmt_c = (
-                    f"路由躍遷確認 {trace_target} 之上游實體接入機房與骨幹電信商為 {upstream_org}"
+                    f"【依據】{f_trace_id} 【方法】上游電信接入點識別與調閱單位對應 【結果】路由躍遷確認 {trace_target} 之上游實體接入機房與骨幹電信商為 {upstream_org}"
                     if is_zh else
-                    f"Upstream transit and physical colocation provider for {trace_target} confirmed via route trace: {upstream_org}"
+                    f"[Source] {f_trace_id} [Method] Upstream Transit Identification & Custodian Mapping [Result] Upstream transit and physical colocation provider for {trace_target} confirmed via route trace: {upstream_org}"
                 )
                 trace_custodians = map_custodians_for_node("IP", last_hop["ip"], {
                     "is_cdn": False,
@@ -627,7 +687,7 @@ class Orchestrator:
                 c_node = PropositionNode(
                     prop_id=c_trace_id,
                     node_kind=PropositionKind.CONCLUSION.value,
-                    rank=2,
+                    rank=f_node.rank + 1,
                     statement=stmt_c,
                     premises=[f_trace_id],
                     rule_name="RULE_ACTIVE_TRACEROUTE",
@@ -636,20 +696,20 @@ class Orchestrator:
                     custodians=trace_custodians
                 )
                 new_props.extend([f_node, c_node])
-                for pp in parent_premises:
-                    new_edges.append((pp, f_trace_id))
+                if parent_id:
+                    new_edges.append((parent_id, f_trace_id))
                 new_edges.append((f_trace_id, c_trace_id))
                 added_fact_ids.append(f_trace_id)
             else:
                 stmt_f = (
-                    f"已對 {trace_target} 執行路由躍遷追蹤（-h {max_hops} -w {timeout_ms}），惟沿途公網節點均封鎖 ICMP 或逾時未回應"
+                    f"【依據】{parent_id or trace_target}（目標 IP {trace_target}） 【方法】tracert 路由躍遷追蹤（-h {max_hops} -w {timeout_ms}） 【結果】沿途公網節點均封鎖 ICMP 或逾時未回應"
                     if is_zh else
-                    f"Executed route hop trace (-h {max_hops} -w {timeout_ms}) toward {trace_target}, but intermediate public hops filtered ICMP or timed out"
+                    f"[Source] {parent_id or trace_target} (Target IP {trace_target}) [Method] tracert Route Hop Trace (-h {max_hops} -w {timeout_ms}) [Result] Intermediate public hops filtered ICMP or timed out"
                 )
                 f_node = PropositionNode(
                     prop_id=f_trace_id,
                     node_kind=PropositionKind.FACT.value,
-                    rank=1 if parent_premises else 0,
+                    rank=parent_rank + 1,
                     statement=stmt_f,
                     premises=parent_premises,
                     rule_name="RULE_ACTIVE_TRACEROUTE",
@@ -657,8 +717,8 @@ class Orchestrator:
                     entity_type="IP"
                 )
                 new_props.append(f_node)
-                for pp in parent_premises:
-                    new_edges.append((pp, f_trace_id))
+                if parent_id:
+                    new_edges.append((parent_id, f_trace_id))
                 added_fact_ids.append(f_trace_id)
 
         elif module_name == "m7":
@@ -676,24 +736,30 @@ class Orchestrator:
             )
             f_oob_id = "F_OOB"
             status_code = oob_res.get("target_status_code", "TIMEOUT")
+            parent_p = next((p for p in existing_props if p.prop_id == "F1"), None)
+            if not parent_p and existing_props:
+                parent_p = existing_props[0]
+            parent_id = parent_p.prop_id if parent_p else None
+            parent_rank = parent_p.rank if parent_p else 0
+
             stmt_oob = (
-                f"已對 {target_url} 發送主動回連驗證請求（HTTP 狀態: {status_code}）"
+                f"【依據】{parent_id or target_url}（調查端點 {target_url}） 【方法】主動 Out-Of-Band 回連探測 【結果】已發送驗證請求（HTTP 狀態: {status_code}）"
                 if is_zh else
-                f"Active OOB callback verification probe sent to {target_url} (HTTP Status: {status_code})"
+                f"[Source] {parent_id or target_url} (Target Endpoint {target_url}) [Method] Active Out-Of-Band Probe [Result] Verification probe delivered (HTTP Status: {status_code})"
             )
             f_node = PropositionNode(
                 prop_id=f_oob_id,
                 node_kind=PropositionKind.FACT.value,
-                rank=1,
+                rank=parent_rank + 1,
                 statement=stmt_oob,
-                premises=["F1"] if "F1" in existing_prop_ids else [],
+                premises=[parent_id] if parent_id else [],
                 rule_name="RULE_ACTIVE_OOB_PROBE",
                 target_entity=target,
                 entity_type="IP" if is_ip_target else "DOMAIN_L1"
             )
             new_props.append(f_node)
-            if "F1" in existing_prop_ids:
-                new_edges.append(("F1", f_oob_id))
+            if parent_id:
+                new_edges.append((parent_id, f_oob_id))
             added_fact_ids.append(f_oob_id)
 
         # Save merged propositions without overwriting previous steps
