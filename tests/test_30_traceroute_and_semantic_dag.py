@@ -159,3 +159,89 @@ Tracing route to 182.173.0.181 over a maximum of 20 hops
     # Verify MCP osint_trace without acknowledge_opsec_risk returns SKIPPED_OPSEC
     mcp_res_blocked = mcp_server.osint_trace(session_id="ofa177.net", target="182.173.0.181", acknowledge_opsec_risk=False)
     assert mcp_res_blocked["executed"] is False
+
+def test_semantic_svg_renderer_multiline_colors_and_legend_toggles(tmp_path):
+    from ariadns.modules.m6_reporting import render_evidence_artifacts
+    from ariadns.models.entities import DataCustodian
+
+    db_file = tmp_path / "test_svg.db"
+    db = DatabaseManager(str(db_file))
+
+    nodes = [
+        PropositionNode(
+            prop_id="F1",
+            node_kind="FACT",
+            rank=0,
+            statement="網域 ofa177.net 解析至 A:['182.173.0.181']，CDN:False (無)，Server:nginx",
+            target_entity="ofa177.net",
+            entity_type="DOMAIN_L1",
+        ),
+        PropositionNode(
+            prop_id="F_ORIGIN",
+            node_kind="FACT",
+            rank=0,
+            statement="被動 DNS 發現真實來源 IP 182.173.0.181",
+            target_entity="182.173.0.181",
+            entity_type="IP",
+        ),
+        PropositionNode(
+            prop_id="F_PIVOT_1",
+            node_kind="FACT",
+            rank=1,
+            statement="橫向轉向發現共構網域 sibling-ofa177.net",
+            premises=["F1"],
+            target_entity="sibling-ofa177.net",
+            entity_type="DOMAIN_L2",
+        ),
+        PropositionNode(
+            prop_id="F_TRACE",
+            node_kind="FACT",
+            rank=1,
+            statement="路由躍遷追蹤至 182.173.0.181",
+            premises=["F1"],
+            rule_name="RULE_ACTIVE_TRACEROUTE",
+            target_entity="182.173.0.181",
+            entity_type="IP",
+        ),
+        PropositionNode(
+            prop_id="C1",
+            node_kind="CONCLUSION",
+            rank=2,
+            statement="已確認基礎建設與調閱機構 GoDaddy.com, LLC",
+            premises=["F1", "F_ORIGIN"],
+            target_entity="ofa177.net",
+            entity_type="DOMAIN_L1",
+            custodians=[DataCustodian("GoDaddy", "Registrar", "DOMAIN:ofa177.net", ["KYC"])],
+        ),
+    ]
+    edges = [("F1", "F_PIVOT_1"), ("F1", "F_TRACE"), ("F1", "C1"), ("F_ORIGIN", "C1")]
+    db.save_normalized_evidence("ofa177.net", nodes, edges)
+
+    # 1. Render with color_coding=True and show_legend=True
+    svg_path, _, _, _ = render_evidence_artifacts(
+        "ofa177.net", db, tmp_path, color_coding=True, show_legend=True, lang="zh"
+    )
+    svg_content = svg_path.read_text(encoding="utf-8")
+    # Must contain all 4 semantic box colors
+    assert "#38bdf8" in svg_content  # Direct Fact
+    assert "#f59e0b" in svg_content  # Origin / Trace
+    assert "#818cf8" in svg_content  # Pivot L2
+    assert "#10b981" in svg_content  # Custodian Conclusion
+    # Must contain dashed and dotted edge styles
+    assert 'stroke-dasharray="6,4"' in svg_content
+    assert 'stroke-dasharray="2,4"' in svg_content
+    # Must contain Legend
+    assert "圖例說明" in svg_content
+    # Full statement preserved across wrapped lines without truncating IP at 32 chars
+    assert "182.173.0.181" in svg_content
+    assert "GoDaddy.com, LLC" in svg_content
+
+    # 2. Render with color_coding=False and show_legend=False
+    svg_path2, _, _, _ = render_evidence_artifacts(
+        "ofa177.net", db, tmp_path, color_coding=False, show_legend=False, lang="zh"
+    )
+    svg_content2 = svg_path2.read_text(encoding="utf-8")
+    assert "#f59e0b" not in svg_content2
+    assert "#10b981" not in svg_content2
+    assert "stroke-dasharray" not in svg_content2
+    assert "圖例說明" not in svg_content2

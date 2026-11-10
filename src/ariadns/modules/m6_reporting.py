@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import textwrap
 from pathlib import Path
 from typing import Any, Optional
 try:
@@ -28,7 +29,10 @@ def render_evidence_artifacts(
     session_id: str,
     db: DatabaseManager,
     output_dir: str | Path,
-    selected_prop_ids: Optional[list[str]] = None
+    selected_prop_ids: Optional[list[str]] = None,
+    color_coding: bool = True,
+    show_legend: bool = True,
+    lang: str = "zh"
 ) -> tuple[Path, Path, Path, ArtifactManifest]:
     """Deterministically render non-draggable static SVG/PNG evidence DAG and forensic manifest."""
     out_path = Path(output_dir)
@@ -77,18 +81,20 @@ def render_evidence_artifacts(
         rank_groups.setdefault(p.rank, []).append(p)
 
     ranks = sorted(rank_groups.keys())
-    box_w = 260
-    box_h = 70
+    box_w = 340
+    box_h = 110
     h_gap = 40
-    v_gap = 120
+    v_gap = 100
     pad_x = 60
     pad_y = 60
+    legend_h = 55 if show_legend else 0
 
     max_nodes_in_rank = max((len(nodes) for nodes in rank_groups.values()), default=1)
-    svg_w = max(1000, pad_x * 2 + max_nodes_in_rank * (box_w + h_gap))
-    svg_h = pad_y * 2 + max(1, len(ranks)) * (box_h + v_gap) + 80
+    svg_w = max(1100, pad_x * 2 + max_nodes_in_rank * (box_w + h_gap))
+    svg_h = pad_y * 2 + max(1, len(ranks)) * (box_h + v_gap) + 80 + legend_h
 
     positions: dict[str, tuple[int, int]] = {}
+    prop_lookup: dict[str, PropositionNode] = {p.prop_id: p for p in rendered_props}
     for r_idx, r in enumerate(ranks):
         nodes = rank_groups[r]
         total_w = len(nodes) * box_w + (len(nodes) - 1) * h_gap
@@ -98,12 +104,36 @@ def render_evidence_artifacts(
             x = start_x + n_idx * (box_w + h_gap)
             positions[p.prop_id] = (x, y)
 
+    def _classify_node_colors(node: PropositionNode) -> tuple[str, str]:
+        if not color_coding:
+            return ("#38bdf8", "#0284c7") if node.node_kind == "FACT" else ("#94a3b8", "#475569")
+        pid = node.prop_id.upper()
+        if "ORIGIN" in pid or "UNPROXIED" in pid or "TRACE" in pid or node.rule_name == "RULE_ACTIVE_TRACEROUTE":
+            return ("#f59e0b", "#d97706")  # Amber: Origin / Route Breakthrough
+        if "PIVOT" in pid or node.entity_type == "DOMAIN_L2":
+            return ("#818cf8", "#6366f1")  # Indigo: Correlated L2 Pivot
+        if node.node_kind == "CONCLUSION" or node.custodians:
+            return ("#10b981", "#059669")  # Emerald: Actionable Custodian Conclusion
+        return ("#38bdf8", "#0284c7")      # Cyan: Direct Fact
+
+    def _classify_edge_style(u_id: str, v_id: str) -> tuple[str, str]:
+        if not color_coding:
+            return ("#64748b", "")
+        u_node = prop_lookup.get(u_id)
+        v_node = prop_lookup.get(v_id)
+        combined = f"{u_id}_{v_id}".upper()
+        if "TRACE" in combined or "OOB" in combined or (v_node and v_node.rule_name == "RULE_ACTIVE_TRACEROUTE"):
+            return ("#f97316", ' stroke-dasharray="2,4"')  # Dotted orange: Active Trace / OOB
+        if "PIVOT" in combined or (u_node and u_node.entity_type == "DOMAIN_L2") or (v_node and v_node.entity_type == "DOMAIN_L2"):
+            return ("#a855f7", ' stroke-dasharray="6,4"')  # Dashed purple: Pivot correlation
+        return ("#94a3b8", "")                             # Solid slate: Direct deduction
+
     # 1. Generate Static SVG
     svg_lines = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {svg_w} {svg_h}" width="{svg_w}" height="{svg_h}" style="background-color: #0f172a; font-family: sans-serif;">',
         '  <defs>',
         '    <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">',
-        '      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>',
+        '      <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/>',
         '    </marker>',
         '  </defs>',
     ]
@@ -117,24 +147,60 @@ def render_evidence_artifacts(
             y1 = uy + box_h
             x2 = vx + box_w // 2
             y2 = vy
-            svg_lines.append(f'  <line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>')
+            e_color, e_dash = _classify_edge_style(u, v)
+            svg_lines.append(f'  <line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{e_color}" stroke-width="2"{e_dash} marker-end="url(#arrow)"/>')
 
-    # Draw nodes
+    # Draw nodes with multi-line wrapped statements (no premature 32-char truncation)
     for p in rendered_props:
         x, y = positions[p.prop_id]
         is_fact = (p.node_kind == "FACT")
-        stroke_color = "#38bdf8" if is_fact else "#818cf8"
-        header_color = "#0284c7" if is_fact else "#6366f1"
+        stroke_color, header_color = _classify_node_colors(p)
         badge = "FACT" if is_fact else "CONCLUSION"
 
-        stmt_preview = (p.statement[:32] + "...") if len(p.statement) > 35 else p.statement
-        safe_stmt = stmt_preview.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        wrapped_lines = textwrap.wrap(p.statement, width=42)[:4]
+        if not wrapped_lines:
+            wrapped_lines = [p.statement]
 
         svg_lines.extend([
             f'  <rect x="{x}" y="{y}" width="{box_w}" height="{box_h}" rx="6" fill="#1e293b" stroke="{stroke_color}" stroke-width="2"/>',
             f'  <rect x="{x}" y="{y}" width="{box_w}" height="24" rx="6" fill="{header_color}"/>',
             f'  <text x="{x + 8}" y="{y + 16}" fill="#ffffff" font-size="11" font-weight="bold">[{badge}] {p.prop_id}</text>',
-            f'  <text x="{x + 8}" y="{y + 48}" fill="#e2e8f0" font-size="11">{safe_stmt}</text>',
+        ])
+        for line_idx, w_line in enumerate(wrapped_lines):
+            safe_line = w_line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            ty = y + 42 + line_idx * 16
+            svg_lines.append(f'  <text x="{x + 8}" y="{ty}" fill="#e2e8f0" font-size="11">{safe_line}</text>')
+
+    # Optional Embedded Legend
+    if show_legend:
+        leg_y = svg_h - 45 - legend_h
+        is_zh = (lang == "zh")
+        leg_title = "圖例說明 (Legend):" if is_zh else "Visual Legend:"
+        lbl_fact = "直接觀測事實 (Direct Fact)" if is_zh else "Direct Fact"
+        lbl_orig = "來源突破/路由追蹤 (Origin/Trace)" if is_zh else "Origin / Route Trace"
+        lbl_piv = "關聯轉向標的 (Pivot L2)" if is_zh else "Correlated Pivot"
+        lbl_conc = "可調閱結論 (Custodian Conclusion)" if is_zh else "Actionable Conclusion"
+        lbl_solid = "實線: 直接解析歸屬" if is_zh else "Solid: Direct Deduction"
+        lbl_dash = "虛線: 橫向共構關聯" if is_zh else "Dashed: Pivot Correlation"
+        lbl_dot = "點線: 主動路由/回連驗證" if is_zh else "Dotted: Active Trace/OOB"
+
+        svg_lines.extend([
+            f'  <rect x="20" y="{leg_y}" width="{svg_w - 40}" height="{legend_h - 8}" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1"/>',
+            f'  <text x="35" y="{leg_y + 18}" fill="#f8fafc" font-size="11" font-weight="bold">{leg_title}</text>',
+            f'  <rect x="160" y="{leg_y + 8}" width="12" height="12" fill="#0284c7" stroke="#38bdf8" stroke-width="1.5"/>',
+            f'  <text x="178" y="{leg_y + 18}" fill="#cbd5e1" font-size="11">{lbl_fact}</text>',
+            f'  <rect x="350" y="{leg_y + 8}" width="12" height="12" fill="#d97706" stroke="#f59e0b" stroke-width="1.5"/>',
+            f'  <text x="368" y="{leg_y + 18}" fill="#cbd5e1" font-size="11">{lbl_orig}</text>',
+            f'  <rect x="570" y="{leg_y + 8}" width="12" height="12" fill="#6366f1" stroke="#818cf8" stroke-width="1.5"/>',
+            f'  <text x="588" y="{leg_y + 18}" fill="#cbd5e1" font-size="11">{lbl_piv}</text>',
+            f'  <rect x="755" y="{leg_y + 8}" width="12" height="12" fill="#059669" stroke="#10b981" stroke-width="1.5"/>',
+            f'  <text x="773" y="{leg_y + 18}" fill="#cbd5e1" font-size="11">{lbl_conc}</text>',
+            f'  <line x1="160" y1="{leg_y + 34}" x2="195" y2="{leg_y + 34}" stroke="#94a3b8" stroke-width="2"/>',
+            f'  <text x="202" y="{leg_y + 38}" fill="#cbd5e1" font-size="11">{lbl_solid}</text>',
+            f'  <line x1="350" y1="{leg_y + 34}" x2="385" y2="{leg_y + 34}" stroke="#a855f7" stroke-width="2" stroke-dasharray="6,4"/>',
+            f'  <text x="392" y="{leg_y + 38}" fill="#cbd5e1" font-size="11">{lbl_dash}</text>',
+            f'  <line x1="570" y1="{leg_y + 34}" x2="605" y2="{leg_y + 34}" stroke="#f97316" stroke-width="2" stroke-dasharray="2,4"/>',
+            f'  <text x="612" y="{leg_y + 38}" fill="#cbd5e1" font-size="11">{lbl_dot}</text>',
         ])
 
     # Watermark stamp
@@ -160,20 +226,21 @@ def render_evidence_artifacts(
                 vx, vy = positions[v]
                 x1, y1 = ux + box_w // 2, uy + box_h
                 x2, y2 = vx + box_w // 2, vy
-                draw.line([(x1, y1), (x2, y2)], fill="#64748b", width=2)
+                e_color, _ = _classify_edge_style(u, v)
+                draw.line([(x1, y1), (x2, y2)], fill=e_color, width=2)
 
         for p in rendered_props:
             x, y = positions[p.prop_id]
             is_fact = (p.node_kind == "FACT")
-            stroke_c = "#38bdf8" if is_fact else "#818cf8"
-            header_c = "#0284c7" if is_fact else "#6366f1"
+            stroke_c, header_c = _classify_node_colors(p)
             badge = "FACT" if is_fact else "CONCLUSION"
 
             draw.rounded_rectangle([x, y, x + box_w, y + box_h], radius=6, fill="#1e293b", outline=stroke_c, width=2)
             draw.rectangle([x, y, x + box_w, y + 24], fill=header_c)
             draw.text((x + 8, y + 5), f"[{badge}] {p.prop_id}", fill="#ffffff")
-            stmt_preview = (p.statement[:32] + "...") if len(p.statement) > 35 else p.statement
-            draw.text((x + 8, y + 36), stmt_preview, fill="#e2e8f0")
+            wrapped_lines = textwrap.wrap(p.statement, width=42)[:4]
+            for l_idx, w_line in enumerate(wrapped_lines):
+                draw.text((x + 8, y + 32 + l_idx * 16), w_line, fill="#e2e8f0")
 
         draw.rectangle([0, svg_h - 45, svg_w, svg_h], fill="#020617")
         draw.text((30, svg_h - 30), f"Ariadns Forensic Watermark | Session: {clean_session} | Payload SHA-256: {payload_sha256}", fill="#94a3b8")

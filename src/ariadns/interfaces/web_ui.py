@@ -214,6 +214,9 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
     def _handle_post_render(self, body: dict[str, Any]) -> None:
         session_id = body.get("session_id", "").strip()
         selected_prop_ids = body.get("selected_prop_ids")
+        color_coding = bool(body.get("color_coding", True))
+        show_legend = bool(body.get("show_legend", True))
+        lang = body.get("lang", "zh")
         output_dir = body.get("output_dir", WorkbenchRequestHandler.output_dir)
 
         if not session_id:
@@ -226,7 +229,10 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
                 session_id=session_id,
                 db=orch.db,
                 output_dir=output_dir,
-                selected_prop_ids=selected_prop_ids
+                selected_prop_ids=selected_prop_ids,
+                color_coding=color_coding,
+                show_legend=show_legend,
+                lang=lang
             )
             logs = orch.db.get_audit_logs(session_id)
 
