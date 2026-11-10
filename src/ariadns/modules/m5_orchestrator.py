@@ -2,7 +2,9 @@
 
 import datetime
 import hashlib
+import ipaddress
 import json
+import re
 from typing import Any, Optional
 from ariadns.models.config import AppConfig
 from ariadns.models.entities import (
@@ -278,11 +280,16 @@ class Orchestrator:
         new_edges: list[tuple[str, str]] = []
         added_fact_ids: list[str] = []
 
-        if module_name == "m1":
-            dns_records = self.m1.resolve_records(target)
-            identity = self.m1.get_identity_profile(target, dns_records)
-            infra = self.m1.probe_infrastructure(target, dns_records.get("A", []), run_portscan=params.get("run_portscan", False))
+        lang = params.get("lang", "en")
+        is_zh = (lang == "zh")
 
+        try:
+            ipaddress.ip_address(target)
+            is_ip_target = True
+        except ValueError:
+            is_ip_target = False
+
+        if module_name == "m1":
             is_secondary = (target != session_id)
             target_slug = target.replace(".", "_").replace(":", "_").replace("-", "_")
             prefix = f"{target_slug}_" if is_secondary else ""
@@ -290,49 +297,118 @@ class Orchestrator:
             f2_id = f"{prefix}F2"
             c1_id = f"{prefix}C1"
 
-            f1 = PropositionNode(
-                prop_id=f1_id,
-                node_kind=PropositionKind.FACT.value,
-                rank=0,
-                statement=f"Domain {target} resolves to A:{dns_records.get('A', [])}, CDN:{infra.is_cdn} ({infra.cdn_provider or 'None'}), Server:{infra.server_banner or 'Unknown'}",
-                target_entity=target,
-                entity_type="DOMAIN_L2" if is_secondary else "DOMAIN_L1"
-            )
-            f2 = PropositionNode(
-                prop_id=f2_id,
-                node_kind=PropositionKind.FACT.value,
-                rank=0,
-                statement=f"Domain {target} registered via '{identity.registrar_name or 'Unknown'}', SOA Admin '{identity.soa_admin_email or 'N/A'}', Tokens: {list(identity.verification_tokens.keys())}",
-                target_entity=target,
-                entity_type="DOMAIN_L2" if is_secondary else "DOMAIN_L1"
-            )
-            l1_custodians = map_custodians_for_node("DOMAIN_L1", target, {
-                "registrar_name": identity.registrar_name,
-                "ns_list": dns_records.get("NS", []),
-                "cdn_provider": infra.cdn_provider,
-                "current_ip": infra.current_ip,
-            })
-            c1_premises = [f1_id, f2_id]
-            # Link to pivot origin if target was discovered via pivoting/unproxied IP
-            for p in existing_props:
-                if p.target_entity == target and p.prop_id not in c1_premises:
-                    c1_premises.append(p.prop_id)
-                    new_edges.append((p.prop_id, c1_id))
+            if is_ip_target:
+                infra = self.m1.probe_infrastructure(target, [target], run_portscan=params.get("run_portscan", False))
+                asn_label = f"{infra.asn or 'AS_UNKNOWN'} ({infra.asn_org_name or ('網路機房服務商' if is_zh else 'Hosting Provider')})"
+                stmt_f1 = (
+                    f"主機 IP {target} 歸屬於 {asn_label}，Server 標頭: {infra.server_banner or '未知'}，CDN 代理: {infra.is_cdn}"
+                    if is_zh else
+                    f"Host IP {target} belongs to {asn_label}, Server:{infra.server_banner or 'Unknown'}, CDN:{infra.is_cdn}"
+                )
+                f1 = PropositionNode(
+                    prop_id=f1_id,
+                    node_kind=PropositionKind.FACT.value,
+                    rank=0,
+                    statement=stmt_f1,
+                    target_entity=target,
+                    entity_type="IP"
+                )
+                ip_custodians = map_custodians_for_node("IP", target, {
+                    "is_cdn": infra.is_cdn,
+                    "cdn_provider": infra.cdn_provider,
+                    "asn": infra.asn,
+                    "asn_org_name": infra.asn_org_name,
+                    "lang": lang,
+                })
+                c1_premises = [f1_id]
+                for p in existing_props:
+                    if (p.target_entity == target or target in p.statement) and p.prop_id not in c1_premises:
+                        c1_premises.append(p.prop_id)
+                        new_edges.append((p.prop_id, c1_id))
 
-            c1 = PropositionNode(
-                prop_id=c1_id,
-                node_kind=PropositionKind.CONCLUSION.value,
-                rank=1,
-                statement=f"Active infrastructure and registration authority identified for {target}",
-                premises=c1_premises,
-                rule_name="RULE_DIRECT_OBSERVATION",
-                target_entity=target,
-                entity_type="DOMAIN_L2" if is_secondary else "DOMAIN_L1",
-                custodians=l1_custodians
-            )
-            new_props.extend([f1, f2, c1])
-            new_edges.extend([(f1_id, c1_id), (f2_id, c1_id)])
-            added_fact_ids.extend([f1_id, f2_id])
+                stmt_c1 = (
+                    f"已確認主機 IP {target} 之網路電信商與機房歸屬（{asn_label}）"
+                    if is_zh else
+                    f"Active hosting infrastructure and network operator identified for IP {target} ({asn_label})"
+                )
+                c1 = PropositionNode(
+                    prop_id=c1_id,
+                    node_kind=PropositionKind.CONCLUSION.value,
+                    rank=1,
+                    statement=stmt_c1,
+                    premises=c1_premises,
+                    rule_name="RULE_DIRECT_OBSERVATION",
+                    target_entity=target,
+                    entity_type="IP",
+                    custodians=ip_custodians
+                )
+                new_props.extend([f1, c1])
+                new_edges.append((f1_id, c1_id))
+                added_fact_ids.append(f1_id)
+            else:
+                dns_records = self.m1.resolve_records(target)
+                identity = self.m1.get_identity_profile(target, dns_records)
+                infra = self.m1.probe_infrastructure(target, dns_records.get("A", []), run_portscan=params.get("run_portscan", False))
+                ent_type = "DOMAIN_L2" if is_secondary else "DOMAIN_L1"
+
+                stmt_f1 = (
+                    f"網域 {target} 解析至 A:{dns_records.get('A', [])}，CDN:{infra.is_cdn} ({infra.cdn_provider or '無'})，Server:{infra.server_banner or '未知'}"
+                    if is_zh else
+                    f"Domain {target} resolves to A:{dns_records.get('A', [])}, CDN:{infra.is_cdn} ({infra.cdn_provider or 'None'}), Server:{infra.server_banner or 'Unknown'}"
+                )
+                stmt_f2 = (
+                    f"網域 {target} 註冊商為 '{identity.registrar_name or '未知'}'，SOA 信箱 '{identity.soa_admin_email or '無'}'，驗證標記: {list(identity.verification_tokens.keys())}"
+                    if is_zh else
+                    f"Domain {target} registered via '{identity.registrar_name or 'Unknown'}', SOA Admin '{identity.soa_admin_email or 'N/A'}', Tokens: {list(identity.verification_tokens.keys())}"
+                )
+                f1 = PropositionNode(
+                    prop_id=f1_id,
+                    node_kind=PropositionKind.FACT.value,
+                    rank=0,
+                    statement=stmt_f1,
+                    target_entity=target,
+                    entity_type=ent_type
+                )
+                f2 = PropositionNode(
+                    prop_id=f2_id,
+                    node_kind=PropositionKind.FACT.value,
+                    rank=0,
+                    statement=stmt_f2,
+                    target_entity=target,
+                    entity_type=ent_type
+                )
+                l1_custodians = map_custodians_for_node(ent_type, target, {
+                    "registrar_name": identity.registrar_name,
+                    "ns_list": dns_records.get("NS", []),
+                    "cdn_provider": infra.cdn_provider,
+                    "current_ip": infra.current_ip,
+                    "lang": lang,
+                })
+                c1_premises = [f1_id, f2_id]
+                for p in existing_props:
+                    if (p.target_entity == target or target in p.statement) and p.prop_id not in c1_premises:
+                        c1_premises.append(p.prop_id)
+                        new_edges.append((p.prop_id, c1_id))
+
+                stmt_c1 = (
+                    f"已確認網域 {target} 之基礎建設與註冊管理機構（{identity.registrar_name or '未知'}）"
+                    if is_zh else
+                    f"Active infrastructure and registration authority identified for {target}"
+                )
+                c1 = PropositionNode(
+                    prop_id=c1_id,
+                    node_kind=PropositionKind.CONCLUSION.value,
+                    rank=1,
+                    statement=stmt_c1,
+                    premises=c1_premises,
+                    rule_name="RULE_DIRECT_OBSERVATION",
+                    target_entity=target,
+                    entity_type=ent_type,
+                    custodians=l1_custodians
+                )
+                new_props.extend([f1, f2, c1])
+                new_edges.extend([(f1_id, c1_id), (f2_id, c1_id)])
+                added_fact_ids.extend([f1_id, f2_id])
 
         elif module_name == "m2":
             subdomains = self.m2.run(target)
@@ -340,11 +416,16 @@ class Orchestrator:
             for sub in subdomains:
                 if sub.ip:
                     f_id = f"F_SUB_{sub_idx}"
+                    stmt_sub = (
+                        f"子網域 {sub.subdomain} 解析至 {sub.ip}（伺服器: {sub.server or '未知'}）"
+                        if is_zh else
+                        f"Subdomain {sub.subdomain} resolves to {sub.ip} (Server: {sub.server or 'Unknown'})"
+                    )
                     f_node = PropositionNode(
                         prop_id=f_id,
                         node_kind=PropositionKind.FACT.value,
                         rank=0,
-                        statement=f"Subdomain {sub.subdomain} resolves to {sub.ip} (Server: {sub.server or 'Unknown'})",
+                        statement=stmt_sub,
                         target_entity=sub.subdomain,
                         entity_type="SUBDOMAIN"
                     )
@@ -354,15 +435,21 @@ class Orchestrator:
                     # If unproxied / non-CDN IP found
                     if "47." in sub.ip or "192." in sub.ip or "10." in sub.ip or not sub.server == "cloudflare":
                         c_id = f"C_UNPROXIED_{sub_idx}"
+                        stmt_unp = (
+                            f"透過子網域 {sub.subdomain} 發現未經 CDN 代理之後端真實主機 {sub.ip}"
+                            if is_zh else
+                            f"Unproxied backend origin host detected at {sub.ip} via {sub.subdomain}"
+                        )
                         c_node = PropositionNode(
                             prop_id=c_id,
                             node_kind=PropositionKind.CONCLUSION.value,
                             rank=2,
-                            statement=f"Unproxied backend origin host detected at {sub.ip} via {sub.subdomain}",
+                            statement=stmt_unp,
                             premises=["C1", f_id] if "C1" in existing_prop_ids else [f_id],
                             rule_name="RULE_ORIGIN_CONFIRMATION",
                             target_entity=sub.ip,
-                            entity_type="IP"
+                            entity_type="IP",
+                            custodians=map_custodians_for_node("IP", sub.ip, {"is_cdn": False, "lang": lang})
                         )
                         new_props.append(c_node)
                         new_edges.append((f_id, c_id))
@@ -373,26 +460,39 @@ class Orchestrator:
         elif module_name == "m3":
             # Origin detection
             current_ips = params.get("current_ips", [])
-            origin_ip, status = self.m3.detect_origin(target, current_ips)
+            first_ip = current_ips[0] if isinstance(current_ips, list) and current_ips else (current_ips if isinstance(current_ips, str) else None)
+            origin_ip, status = self.m3.detect_origin(target, first_ip)
+            status_val = status.value if hasattr(status, "value") else str(status)
             if origin_ip:
                 f_id = "F_ORIGIN"
+                stmt_forig = (
+                    f"被動 DNS 與特徵碰撞發現候選真實來源主機 IP {origin_ip}（狀態: {status_val}）"
+                    if is_zh else
+                    f"Passive DNS / collision detected candidate origin IP {origin_ip} (Status: {status_val})"
+                )
                 f_node = PropositionNode(
                     prop_id=f_id,
                     node_kind=PropositionKind.FACT.value,
                     rank=0,
-                    statement=f"Passive DNS / collision detected candidate origin IP {origin_ip} (Status: {status.value})",
+                    statement=stmt_forig,
                     target_entity=origin_ip,
                     entity_type="IP"
+                )
+                stmt_corig = (
+                    f"已確認受保護網域 {target} 之候選真實來源伺服器為 {origin_ip}"
+                    if is_zh else
+                    f"Candidate Origin Server {origin_ip} confirmed/identified for {target}"
                 )
                 c_node = PropositionNode(
                     prop_id="C_ORIGIN",
                     node_kind=PropositionKind.CONCLUSION.value,
                     rank=2,
-                    statement=f"Candidate Origin Server {origin_ip} confirmed/identified for {target}",
+                    statement=stmt_corig,
                     premises=["C1", f_id] if "C1" in existing_prop_ids else [f_id],
                     rule_name="RULE_ORIGIN_CONFIRMATION",
                     target_entity=origin_ip,
-                    entity_type="IP"
+                    entity_type="IP",
+                    custodians=map_custodians_for_node("IP", origin_ip, {"is_cdn": False, "lang": lang})
                 )
                 new_props.extend([f_node, c_node])
                 new_edges.append((f_id, "C_ORIGIN"))
@@ -404,24 +504,52 @@ class Orchestrator:
             # Pivoting
             pivot_type = params.get("type", "reverse_ip")
             pivoted: list[str] = []
+            pivot_source_target = target
             if pivot_type == "reverse_ip":
-                pivoted = self.m4.reverse_ip(target)
+                if not is_ip_target:
+                    # Extract resolved IP from existing propositions for this domain
+                    ip_regex = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+                    found_ips: list[str] = []
+                    for p in existing_props:
+                        if p.target_entity == target or p.prop_id == "F1":
+                            for m_ip in ip_regex.findall(p.statement):
+                                if m_ip not in found_ips:
+                                    found_ips.append(m_ip)
+                    if found_ips:
+                        pivot_source_target = found_ips[0]
+                pivoted = self.m4.reverse_ip(pivot_source_target)
             elif pivot_type == "reverse_mx":
                 pivoted = self.m4.reverse_mx(target)
             elif pivot_type == "reverse_ns":
                 pivoted = self.m4.reverse_ns(target)
 
+            parent_prop_id = None
+            for p in existing_props:
+                if p.target_entity == pivot_source_target or pivot_source_target in p.statement:
+                    parent_prop_id = p.prop_id
+                    break
+
             for idx, p_dom in enumerate(pivoted[:10], start=1):
+                if p_dom.lower() == session_id or p_dom.lower() == target:
+                    continue
                 f_id = f"F_PIVOT_{idx}"
+                stmt_piv = (
+                    f"由 {pivot_source_target}（{pivot_type}）橫向轉向發現共構關聯網域 {p_dom}"
+                    if is_zh else
+                    f"Pivoting on {pivot_source_target} ({pivot_type}) discovered correlated domain {p_dom}"
+                )
                 f_node = PropositionNode(
                     prop_id=f_id,
                     node_kind=PropositionKind.FACT.value,
-                    rank=0,
-                    statement=f"Pivoting on {target} ({pivot_type}) discovered correlated domain {p_dom}",
+                    rank=1 if parent_prop_id else 0,
+                    statement=stmt_piv,
+                    premises=[parent_prop_id] if parent_prop_id else [],
                     target_entity=p_dom,
                     entity_type="DOMAIN_L2"
                 )
                 new_props.append(f_node)
+                if parent_prop_id:
+                    new_edges.append((parent_prop_id, f_id))
                 added_fact_ids.append(f_id)
 
         # Save merged propositions without overwriting previous steps
