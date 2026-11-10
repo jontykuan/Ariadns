@@ -1,6 +1,6 @@
-# Ariadns v1.0.0: Automated Domain OSINT & Pivoting Engine
+# Ariadns v1.0.1: Automated Domain OSINT & Pivoting Engine
 
-> **版本命名邏輯 (Semantic Versioning)**：`vX.Y.Z`（當前定調：`v1.0.0`）
+> **版本命名邏輯 (Semantic Versioning)**：`vX.Y.Z`（當前定調：`v1.0.1`）
 > - **X (Major)**：大型更新、底層資料庫或整體架構重大改動。
 > - **Y (Minor)**：主要功能的調整、新增模組或介面增修。
 > - **Z (Patch)**：Bugfix 缺陷修復、相容性優化。
@@ -31,6 +31,7 @@ flowchart TD
         M4["M4: 多維度樞紐反查 (Reverse IP/MX/NS/Token, 7天誤報過濾)"]
         M6["M6: 純 Python 決定性靜態圖譜 (SVG/PNG) 與 Markdown 報告匯出"]
         M7["M7: 隔離手動 Out-of-band 回連探測 (需風險確認)"]
+        M9["M9: 主動路由躍遷追蹤與上游骨幹 ASN 辨識 (Tracert)"]
     end
 
     subgraph Storage ["正規化儲存與鑑識校驗 (Storage & Forensics)"]
@@ -158,6 +159,11 @@ Ariadns 提供 **一鍵全自動 CLI**、**分步工作階段 CLI**、**互動�
   ariadns manual-oob -t https://target.com/preview -c https://attacker-listener.com/callback --ack-risk
   ```
 
+- **主動路由躍遷追蹤與末跳機房探測（需明確風險確認）**：
+  ```bash
+  ariadns trace -d example.com --target 182.173.0.181 -H 20 -w 500 --tail-hops 3 --ack-risk
+  ```
+
 ### 3. 本地網域公開情資分析平台（Local Web UI Platform）
 
 包裝完整 CLI 能力的高密度視覺化操作介面（遵循 Impeccable 設計系統，零無效 AI 卡片）：
@@ -250,7 +256,7 @@ Ariadns 內建遵循 Model Context Protocol（MCP）標準的 stdio 伺服器，
 
 ## 1. Overview & Key Capabilities
 
-**Ariadns v1.0.0** is a modular, high-density, **local-first** domain OSINT and forensic investigation framework. It provides **Tri-Parity Interfaces** across CLI, local Web UI, and FastMCP for AI agents.
+**Ariadns v1.0.1** is a modular, high-density, **local-first** domain OSINT and forensic investigation framework. It provides **Tri-Parity Interfaces** across CLI, local Web UI, and FastMCP for AI agents.
 
 ### Versioning Logic (Semantic Versioning)
 Ariadns adheres to Semantic Versioning (`vX.Y.Z`):
@@ -427,6 +433,128 @@ Add the following to your agent's MCP configuration file (e.g., `claude_desktop_
 3. **Public Infrastructure Filtration**: Blacklists and 7-day MISP feeds prevent false-positive pivoting on multi-tenant mail and nameservers (Google, Microsoft, Cloudflare, etc.).
 4. **Read-Only SQLite Boundary**: All agent-driven SQL queries run through SQLite URI `mode=ro` preventing database mutation.
 5. **Isolated Manual OOB Probing**: Active callback injection is strictly excluded from automated workflows and requires explicit human risk acknowledgement (`--ack-risk`).
+
+---
+
+## 五、系統設計方案與推論引擎演進 (System Design & Causal Graph Theory)
+
+Ariadns 突破傳統開源情報工具僅羅列平面資產清單的局限，採用嚴謹的**形式化因果命題 DAG（Causal Propositional Directed Acyclic Graph）**與**鑑識調閱單位自動映射機制**。
+
+### 5.1 拓撲因果鏈與動態層級推導 (Topological Causal Derivation & Dynamic Rank)
+- **非孤島約束（No Disconnected Islands）**：所有衍生事實節點（包括次要 IP/網域探測結果 `*_F1`、子網域 `F_SUB_*`、來源伺服器 `F_ORIGIN`、共構轉向資產 `F_PIVOT_*`、路由躍遷節點 `F_TRACE`）均強制溯源自提供該線索的上游節點。
+- **動態層級公式**：
+  $$\text{rank}(P) = \begin{cases} 0 & \text{若 } \text{premises}(P) = \emptyset \text{ (根網域直接觀測事實)} \\ 1 + \max_{u \in \text{premises}(P)} \text{rank}(u) & \text{若 } \text{premises}(P) \neq \emptyset \text{ (衍生推導節點)} \end{cases}$$
+- **結構分層保證**：
+  - **Rank 0**：調查標的之權威 DNS、RDAP 基礎觀測 (`F1`, `F2`)。
+  - **Rank 1**：依根節點解析線索發起之衍生技術探測（如 IP 的 ASN 歸屬 `182_173_0_181_F1`、子網域枚舉 `F_SUB_1`、CDN 源站穿透 `F_ORIGIN`、目標末跳路由 `F_TRACE`）。
+  - **Rank 2..N**：基於衍生線索進一步發起之橫向轉向 (`F_PIVOT_*`) 或具法律效力之可調閱結論 (`C1`, `C_ORIGIN`, `C_TRACE`)。
+
+### 5.2 語意化三段式命題陳述 (Structured Premise-Method-Result Statements)
+為確保調查結論具備法庭鑑識等級之可溯源性，所有節點 statement 嚴格採用**三段式結構化敘述**：
+- **繁體中文 (`lang="zh"`)**：
+  `【依據】<來源線索或父命題ID> 【方法】<使用的探測工具或比對技術> 【結果】<明確客觀的事實或結論內容>`
+  - *範例 1*：`【依據】F1（解析紀錄包含 182.173.0.181） 【方法】Team Cymru BGP/ASN 與 HTTP 標頭探測 【結果】主機 IP 182.173.0.181 歸屬於 AS3462 (Chunghwa Telecom Co., Ltd.)，Server 標頭: nginx，CDN 代理: False`
+  - *範例 2*：`【依據】F1（根網域 ofa177.net） 【方法】被動憑證透明度 (CT) 與 DNS 字典枚舉 【結果】子網域 api.ofa177.net 解析至 182.173.0.182（伺服器: nginx）`
+- **英文 (`lang="en"`)**：
+  `[Source] <upstream premise> [Method] <technique used> [Result] <observed evidence>`
+
+### 5.3 圖面連線中點方法膠囊標籤 (Midpoint Edge Method Pills)
+有向連線 $(u \to v)$ 的幾何中點自動計算座標 $(m_x, m_y)$，並繪製具深色底框與對應線條色彩的方法膠囊標籤（Edge Method Pill）：
+- `A紀錄 ➔ ASN歸屬探測`：由主機 A/AAAA 解析記錄發起之 BGP/ASN 探測。
+- `網域 ➔ 子網域枚舉`：由主網域透過被動 CT 日誌與字典發起之子網域搜集。
+- `受保護網域 ➔ 來源碰撞探測`：透過歷史 pDNS 回溯與 Host 標頭/Favicon 碰撞發起之 CDN 穿透。
+- `橫向共構轉向`：透過反向 IP、MX、NS 關聯延伸之共構標的。
+- `路由躍遷追蹤`：透過 tracert 擷取目標前端最末跳實體接入機房。
+- `事實推導 ➔ 調閱結論`：由技術事實推導出的可調閱實體結論。
+
+### 5.4 四色語意節點框與三種因果連線樣式 (Semantic Visual Encoding & Legend)
+- **4 色節點分類**：
+  - **天藍色 (`#38bdf8`)**：直接觀測事實 (Direct Fact)
+  - **琥珀橘 (`#f59e0b`)**：來源突破 / 路由追蹤 (Origin Breakthrough / Route Trace)
+  - **靛紫色 (`#818cf8`)**：關聯轉向標的 (Correlated Pivot Domain L2)
+  - **翠綠色 (`#10b981`)**：可調閱結論 (Actionable Custodian Conclusion)
+- **3 種連線樣式**：
+  - **灰色實線 (`#94a3b8`)**：直接演繹與所有權歸屬
+  - **紫色虛線 (`#a855f7`, dasharray 6,4)**：橫向共構關聯轉向
+  - **橘色點線 (`#f97316`, dasharray 2,4)**：主動探測、路由追蹤與回連驗證
+
+---
+
+## 六、工程規範與開發流程 (Engineering Standards & TDD Lifecycle)
+
+Ariadns 遵循 Uncle Bob 的極限工程規範，所有功能皆透過嚴格的測試驅動開發與機械防護網落地。
+
+### 6.1 嚴格測試驅動開發 (Uncle Bob TDD: Red-Green-Refactor)
+1. **Red 階段**：先撰寫測試檔案（如 `tests/test_31_causal_derivation_and_edge_labels.py`），明確定義 Gherkin 驗收條件與輸入輸出值，執行確認必定紅燈（Fail on Assertion）。
+2. **Green 階段**：在對應模組以最小程式碼（$\le 20$ LOC 粒度）實現功能，使測試綠燈通過。
+3. **Refactor 階段**：重構優化圈複雜度（Cyclomatic Complexity $\le 10$），提取深模組介面，維持零無效代碼。
+
+### 6.2 決定論式工作樹並行實作 (Git Worktree Task Graphs)
+- 透過 `/mnb-slice` 將架構變更拆解為帶有明確阻擋邊（Blocking Edges）的有向無環任務圖（DAG）。
+- 透過 `/mnb-g-worktree` 在獨立的 `.worktrees/<ticket-id>` 目錄下進行乾淨的隔離實作與驗收，各切片通過驗收門檻後才 Rebase 合併回整合分支，根絕工作區污染。
+
+### 6.3 突變測試與零殘存突變體機制 (Mutation Testing)
+- 測試套件具備**決定論式突變體擊殺防護（Deterministic Mutant Kill）**：
+  - 邊界條件翻轉（如 `>` 改為 `>=`、`is_rendered` 預設值翻轉）必定使測試轉紅。
+  - 任意步驟若發生靜態圖形非預期自動渲染（Autorender Mutant），測試直接拋出致命錯誤終止。
+  - 狀態雜湊或審計日誌遭竄改時，雙層驗證器必須精確回報 `verified=False`。
+
+### 6.4 前端視覺反模式嚴格檢驗 (Impeccable Design System)
+- Web UI 範本檔案 [`workbench.html`](file:///d:/cykuan/geminiCLI/DNSA/src/ariadns/interfaces/templates/workbench.html) 強制納入自動化 CI 檢驗：
+  ```bash
+  npx impeccable detect "src/ariadns/interfaces/templates/workbench.html"
+  ```
+- **核心防護準則**：
+  - 嚴格字體下限：所有 CSS 字體大小必須 $\ge 12\text{px}$，徹底禁止模糊微字。
+  - 對比度合規：文字與底色對比度遵循 WCAG AA 標準（深色畫布 `#090d16` 配高亮度文字 `#f8fafc` 與淡灰 `#cbd5e1`）。
+  - 單邊厚邊框禁止：禁用單側裝飾性厚邊框（如 `border-left: 3px solid ...`），全面採用一體化 `1px solid` 微邊框。
+  - 零無效空白：各區塊佈局具備彈性伸展機制（`flex: 1`），證據清單支援多行自然換行。
+
+---
+
+## 七、版本更新指引與歷程 (Version Changelog & Upgrade Guide)
+
+### 7.1 版本發行紀錄 (Changelog)
+
+#### **v1.0.1 (當前版本 - 2026-11-10)**
+- **優化證據推論呈現方案**：
+  - **拓撲因果鏈全面縫合**：M1（次要標的）、M2（子網域）、M3（CDN 來源）、M4（共構轉向）、Trace（路由追蹤）皆自動掛載上游父命題，階層層級依 `rank = parent.rank + 1` 計算，消除斷裂孤島樹。
+  - **結構化三段式敘述**：所有命題改以 `【依據】... 【方法】... 【結果】...`（英文 `[Source] ... [Method] ... [Result] ...`）輸出，直接點明推理邏輯。
+  - **連線中點方法膠囊標籤**：SVG/PNG 在每條有向箭頭幾何中點自動繪製深色底框方法標籤（如 `A紀錄 ➔ ASN歸屬探測`、`網域 ➔ 子網域枚舉`、`受保護網域 ➔ 來源碰撞探測`、`橫向共構轉向`、`路由躍遷追蹤`、`事實推導 ➔ 調閱結論`）。
+  - **節點標題方法標記**：節點上方標記模組代號（如 `[FACT] F1 | M1:DNS探測`、`[FACT] 182_173_0_181_F1 | M1:ASN/BGP`、`[CONCLUSION] C1 | 鑑識調閱`）。
+  - **M9 Traceroute 路由躍遷整合**：支援 `-d`、`-h 20`、`-w 500`、保留末 3 跳與 Team Cymru 離線 ASN/PTR 情資富化，Web UI 具備彈出式參數微調與 OPSEC 確認視窗。
+  - **Web UI 壓縮型按鈕卡**：將 M1~M4 壓縮為單行互動按鈕卡，釋出大量垂直空間予多行換行之證據節點清單；新增「自動執行」依序跑完 M1~M4。
+
+#### **v1.0.0 (2026-11-10)**
+- **初始正式發行版**：
+  - 具備三端對等介面（CLI、REPL、Web UI、FastMCP）。
+  - 4 張 SQLite 正規化因果證據表與 7 天 MISP 誤報特徵懶加載同步。
+  - 純 Python 決定性靜態雙格式圖譜渲染（SVG/PNG）與雙層 SHA-256 密碼學浮水印驗證。
+  - 完整的法規調閱機關矩陣（Data Custodians Matrix）映射機制。
+
+---
+
+### 7.2 跨版本升級指引 (Upgrade Instructions)
+
+若您是從先前的版本升級至 `v1.0.1`，請在專案目錄下執行以下指令：
+
+```bash
+# 1. 取得最新程式碼與標籤
+git fetch origin --tags --force
+git checkout master
+git pull origin master --tags --force
+
+# 2. 重新以可編輯模式安裝 Python 模組
+pip install -e .
+
+# 3. 執行依賴與環境檢查
+ariadns doctor
+
+# 4. (選用) 執行全套回歸測試以驗證安裝完整性
+pytest tests/ -v
+```
+
+若瀏覽器開啟 Web UI 時仍顯示舊版快取樣式，請於瀏覽器按下 `Ctrl + F5`（或 `Cmd + Shift + R`）強制重新整理以載入最新壓縮型卡片與對話方塊介面。
 
 ---
 
