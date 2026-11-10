@@ -409,9 +409,24 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      overflow: auto;
+      overflow: hidden;
       padding: 20px;
       position: relative;
+      cursor: grab;
+      user-select: none;
+    }
+
+    .graph-container.panning {
+      cursor: grabbing;
+    }
+
+    #graphImageWrapper {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transform-origin: center center;
     }
 
     .graph-image {
@@ -422,6 +437,7 @@
       border-radius: 6px;
       border: 1px solid var(--border-color);
       background: #0f172a;
+      pointer-events: none;
     }
 
     .empty-state {
@@ -755,7 +771,8 @@
             <span id="lblWatermark">結構雜湊 SHA-256:</span>
             <span class="watermark-hash" id="watermarkHash">尚未生成</span>
           </div>
-          <div style="display: flex; gap: 8px;">
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button type="button" class="btn" id="btnResetZoom" onclick="resetGraphZoom()" title="滾輪縮放 / 左鍵拖曳平移 / 點擊或雙擊重置視角">100%</button>
             <button type="button" class="btn" id="btnToggleFormat" onclick="toggleImageFormat()">格式: SVG</button>
             <button type="button" class="btn" id="btnDownloadArtifacts" onclick="downloadCurrentArtifact()">匯出圖檔</button>
           </div>
@@ -1082,7 +1099,7 @@
       en: {
         caseSelectPrompt: "(Past Cases)",
         targetScopeAll: "All Targets",
-        brandTitle: "Ariadns Forensic Workbench",
+        brandTitle: "Ariadns Workbench",
         domainPlaceholder: "Enter target domain, e.g. example.com",
         loadSession: "Load Session",
         indicatorModule: "MODULE:",
@@ -1215,6 +1232,79 @@
     let currentDepth = localStorage.getItem("ariadns_depth") || "1";
     let manifestData = null;
     let propositionsData = [];
+    let graphScale = 1.0;
+    let graphPanX = 0;
+    let graphPanY = 0;
+    let isPanningGraph = false;
+    let panStartX = 0;
+    let panStartY = 0;
+
+    function applyGraphTransform() {
+      const wrapper = document.getElementById("graphImageWrapper");
+      if (wrapper) {
+        wrapper.style.transform = `translate(${graphPanX}px, ${graphPanY}px) scale(${graphScale})`;
+      }
+      const btnZoom = document.getElementById("btnResetZoom");
+      if (btnZoom) {
+        btnZoom.textContent = `${Math.round(graphScale * 100)}%`;
+      }
+    }
+
+    function resetGraphZoom() {
+      graphScale = 1.0;
+      graphPanX = 0;
+      graphPanY = 0;
+      applyGraphTransform();
+    }
+
+    function initGraphZoomPan() {
+      const container = document.getElementById("graphContainer");
+      if (!container) return;
+
+      container.addEventListener("wheel", (e) => {
+        const wrapper = document.getElementById("graphImageWrapper");
+        if (!wrapper || wrapper.style.display === "none") return;
+        e.preventDefault();
+        const rect = container.getBoundingClientRect();
+        const cx = e.clientX - rect.left - rect.width / 2;
+        const cy = e.clientY - rect.top - rect.height / 2;
+        const factor = (e.deltaY < 0) ? 1.15 : 0.87;
+        const nextScale = Math.min(5.0, Math.max(0.25, graphScale * factor));
+        const ratio = nextScale / graphScale;
+        graphPanX = cx - (cx - graphPanX) * ratio;
+        graphPanY = cy - (cy - graphPanY) * ratio;
+        graphScale = nextScale;
+        applyGraphTransform();
+      }, { passive: false });
+
+      container.addEventListener("mousedown", (e) => {
+        if (e.button !== 0) return;
+        const wrapper = document.getElementById("graphImageWrapper");
+        if (!wrapper || wrapper.style.display === "none") return;
+        isPanningGraph = true;
+        panStartX = e.clientX - graphPanX;
+        panStartY = e.clientY - graphPanY;
+        container.classList.add("panning");
+      });
+
+      window.addEventListener("mousemove", (e) => {
+        if (!isPanningGraph) return;
+        graphPanX = e.clientX - panStartX;
+        graphPanY = e.clientY - panStartY;
+        applyGraphTransform();
+      });
+
+      window.addEventListener("mouseup", () => {
+        if (isPanningGraph) {
+          isPanningGraph = false;
+          container.classList.remove("panning");
+        }
+      });
+
+      container.addEventListener("dblclick", () => {
+        resetGraphZoom();
+      });
+    }
 
     function setLanguage(lang) {
       currentLang = lang;
@@ -1748,8 +1838,9 @@
         const imgUrl = (currentImageFormat === "svg") ? cachedSessionData.svg_url : cachedSessionData.png_url;
         if (wrapper && empty) {
           wrapper.innerHTML = `<img id="evidenceGraphImg" class="graph-image" alt="Ariadns Evidence Architecture DAG" src="${imgUrl}&t=${Date.now()}">`;
-          wrapper.style.display = "block";
+          wrapper.style.display = "flex";
           empty.style.display = "none";
+          resetGraphZoom();
         }
         renderManifestTable(cachedSessionData.manifest);
       } else {
@@ -2014,8 +2105,9 @@
         const empty = document.getElementById("graphEmptyState");
         const imgUrl = (currentImageFormat === "svg") ? data.svg_url : data.png_url;
         wrapper.innerHTML = `<img id="evidenceGraphImg" class="graph-image" alt="Ariadns Evidence Architecture DAG" src="${imgUrl}&t=${Date.now()}">`;
-        wrapper.style.display = "block";
+        wrapper.style.display = "flex";
         empty.style.display = "none";
+        resetGraphZoom();
 
         // Update Manifest Table
         renderManifestTable(data.manifest);
@@ -2083,6 +2175,7 @@
 
     window.addEventListener("DOMContentLoaded", () => {
       setLanguage(currentLang);
+      initGraphZoomPan();
       refreshCaseSelector();
       const urlParams = new URLSearchParams(window.location.search);
       const sessionParam = urlParams.get("session") || urlParams.get("domain");

@@ -26,3 +26,6 @@ Rule-derived investigative action inferred from existing propositions and past a
 
 ### ArtifactManifest
 Dual-layer cryptographic manifest asserting bit-for-bit forensic integrity across all generated case artifacts.
+
+### Workbench
+Local web-based operator console for progressive OSINT case orchestration, interactive evidence DAG inspection, and dual-layer verification.

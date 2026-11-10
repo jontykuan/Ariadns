@@ -75,7 +75,7 @@ def render_evidence_artifacts(
     canonical_payload = json.dumps(payload_obj, sort_keys=True)
     payload_sha256 = hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()
 
-    # Layout computation for deterministic coordinates
+    # Layout computation for deterministic coordinates with 4:3 ~ 16:9 aspect ratio balance
     rank_groups: dict[int, list[PropositionNode]] = {}
     for p in rendered_props:
         rank_groups.setdefault(p.rank, []).append(p)
@@ -83,24 +83,46 @@ def render_evidence_artifacts(
     ranks = sorted(rank_groups.keys())
     box_w = 340
     box_h = 110
-    h_gap = 40
-    v_gap = 100
-    pad_x = 60
+    h_gap = 44
+    base_v_gap = 120
+    pad_x = 70
     pad_y = 60
     legend_h = 55 if show_legend else 0
+    footer_h = 55 + legend_h
 
-    max_nodes_in_rank = max((len(nodes) for nodes in rank_groups.values()), default=1)
-    svg_w = max(1100, pad_x * 2 + max_nodes_in_rank * (box_w + h_gap))
-    svg_h = pad_y * 2 + max(1, len(ranks)) * (box_h + v_gap) + 80 + legend_h
+    max_per_row = 3 if len(rendered_props) <= 10 else 4
+    visual_rows: list[list[PropositionNode]] = []
+    for r in ranks:
+        r_nodes = rank_groups[r]
+        for idx in range(0, len(r_nodes), max_per_row):
+            visual_rows.append(r_nodes[idx : idx + max_per_row])
+
+    num_rows = max(1, len(visual_rows))
+    max_cols = max((len(row) for row in visual_rows), default=1)
+    svg_w = max(1280, pad_x * 2 + max_cols * box_w + max(0, max_cols - 1) * h_gap)
+
+    # Target height to keep svg_w / svg_h within [4/3 (1.33), 16/9 (1.78)]
+    min_h_16_9 = int(svg_w * 9 / 16)
+    v_gap = base_v_gap
+    raw_content_h = num_rows * box_h + max(0, num_rows - 1) * v_gap
+    if num_rows > 1 and (raw_content_h + pad_y * 2 + footer_h) < min_h_16_9:
+        needed_extra = min_h_16_9 - (raw_content_h + pad_y * 2 + footer_h)
+        v_gap = min(200, base_v_gap + needed_extra // (num_rows - 1))
+        raw_content_h = num_rows * box_h + max(0, num_rows - 1) * v_gap
+
+    svg_h = max(min_h_16_9, raw_content_h + pad_y * 2 + footer_h)
+    if svg_w / svg_h < (4 / 3):
+        svg_w = int(svg_h * 4 / 3)
+
+    top_offset = max(pad_y, (svg_h - footer_h - raw_content_h) // 2)
 
     positions: dict[str, tuple[int, int]] = {}
     prop_lookup: dict[str, PropositionNode] = {p.prop_id: p for p in rendered_props}
-    for r_idx, r in enumerate(ranks):
-        nodes = rank_groups[r]
-        total_w = len(nodes) * box_w + (len(nodes) - 1) * h_gap
+    for row_idx, row_nodes in enumerate(visual_rows):
+        total_w = len(row_nodes) * box_w + max(0, len(row_nodes) - 1) * h_gap
         start_x = (svg_w - total_w) // 2
-        y = pad_y + r_idx * (box_h + v_gap)
-        for n_idx, p in enumerate(nodes):
+        y = top_offset + row_idx * (box_h + v_gap)
+        for n_idx, p in enumerate(row_nodes):
             x = start_x + n_idx * (box_w + h_gap)
             positions[p.prop_id] = (x, y)
 

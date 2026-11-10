@@ -139,7 +139,7 @@ ariadns ui --host 127.0.0.1 --port 8000 --open-browser
 3. **證據節點篩選與生成證據結構圖**：
    - 於左側「證據節點」清單勾選欲呈現在圖面上的事實（Fact）與結論（Conclusion）節點。
    - 下方可勾選或取消「顏色提示」（依節點與連線性質套用四色外框與三種線型）與「圖例說明」（於圖面右上角繪製圖例）。
-   - 點擊「生成證據結構圖」即可在右側畫布產出靜態 SVG / PNG 證據圖譜。
+   - 點擊「生成證據結構圖」即可在右側畫布產出靜態 SVG / PNG 證據圖譜（依 4:3 ~ 16:9 人類舒適比例自動排版折行，繪圖區支援滑鼠滾輪縮放、左鍵拖曳平移與雙擊/點擊按鈕重置視角）。
 4. **建議下一步與批次執行**：
    - 系統依據當前進度列出建議步驟並顯示 `(n/MAX)項建議`，可勾選欲執行的建議項目後點擊「批次執行」，或點擊單一建議項目上的「套用並執行」。
 5. **下方鑑識報表分頁**：
@@ -304,7 +304,7 @@ ariadns ui --host 127.0.0.1 --port 8000 --open-browser
 
 - **Target & Case Selection**: Enter a domain/IP in the target input or select a previous investigation from the history dropdown. Click **Auto Run** (`自動執行`) to run M1 through M4 sequentially and render the evidence diagram.
 - **Stepwise & Active Modules**: Run `M1`, `M2`, `M3`, or `M4` individually, or click **Route Trace** (`路由躍遷追蹤`) / **Manual OOB** (`手動回連探測`) to configure parameters and acknowledge OPSEC risk in a modal dialog.
-- **Evidence Graph Controls**: Filter proposition nodes in the left panel, toggle **Color Coding** (`顏色提示`) and **Show Legend** (`圖例說明`), and click **Generate Evidence Graph** (`生成證據結構圖`) to render static SVG/PNG diagrams.
+- **Evidence Graph Controls**: Filter proposition nodes in the left panel, toggle **Color Coding** (`顏色提示`) and **Show Legend** (`圖例說明`), and click **Generate Evidence Graph** (`生成證據結構圖`) to render static SVG/PNG diagrams (balanced to a 4:3 ~ 16:9 aspect ratio; viewport supports mouse wheel zoom, left-click pan, and double-click/button zoom reset).
 - **Forensic Tables**: Review the **Data Custodians Matrix**, **Session Audit Trail**, and **Cryptographic Manifest** in the bottom tabs.
 
 ---

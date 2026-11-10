@@ -256,3 +256,70 @@ def test_ui_v102_prop_rec_swap_and_batch_execution():
     assert "updateRecSelectionCount()" in html
 
 
+def test_v103_aspect_ratio_and_viewport_zoom(tmp_path):
+    import re
+    from ariadns.modules.m6_reporting import render_evidence_artifacts
+
+    db_file = tmp_path / "test_v103.db"
+    db = DatabaseManager(str(db_file))
+
+    # Case 1: Wide single-rank fan-out (1 root + 6 rank-1 nodes + 1 rank-2 conclusion)
+    nodes = [
+        PropositionNode(
+            prop_id="F1",
+            node_kind="FACT",
+            rank=0,
+            statement="【依據】調查目標 example.com 【方法】DNS探測 【結果】解析至 1.2.3.4",
+            target_entity="example.com",
+            entity_type="DOMAIN_L1",
+        )
+    ]
+    edges = []
+    for i in range(1, 7):
+        pid = f"F_SUB_{i}"
+        nodes.append(
+            PropositionNode(
+                prop_id=pid,
+                node_kind="FACT",
+                rank=1,
+                premises=["F1"],
+                statement=f"【依據】F1 【方法】子網域枚舉 【結果】sub{i}.example.com",
+                target_entity=f"sub{i}.example.com",
+                entity_type="SUBDOMAIN",
+            )
+        )
+        edges.append(("F1", pid))
+
+    nodes.append(
+        PropositionNode(
+            prop_id="C1",
+            node_kind="CONCLUSION",
+            rank=2,
+            premises=["F_SUB_1"],
+            statement="【依據】F_SUB_1 【方法】鑑識調閱 【結果】已確認保管單位",
+            target_entity="example.com",
+            entity_type="DOMAIN_L1",
+        )
+    )
+    edges.append(("F_SUB_1", "C1"))
+    db.save_normalized_evidence("example.com", nodes, edges)
+
+    svg_path, _, _, _ = render_evidence_artifacts("example.com", db, tmp_path, lang="zh")
+    svg_text = svg_path.read_text(encoding="utf-8")
+
+    m = re.search(r'<svg[^>]+width="(\d+)"\s+height="(\d+)"', svg_text)
+    assert m is not None
+    w, h = int(m.group(1)), int(m.group(2))
+    aspect_ratio = w / h
+    # Must fall within human-comfortable 4:3 (~1.33) to 16:9 (~1.78) band
+    assert 1.30 <= aspect_ratio <= 1.80, f"Expected aspect ratio in [1.30, 1.80], got {aspect_ratio:.2f} ({w}x{h})"
+
+    # Verify interactive zoom & pan support in workbench.html
+    tpl_path = Path(__file__).parent.parent / "src" / "ariadns" / "interfaces" / "templates" / "workbench.html"
+    html = tpl_path.read_text(encoding="utf-8")
+    assert 'id="btnResetZoom"' in html
+    assert "resetGraphZoom()" in html
+    assert "applyGraphTransform()" in html
+
+
+

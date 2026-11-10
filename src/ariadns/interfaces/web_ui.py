@@ -1,4 +1,4 @@
-"""Ariadns Local Web UI Forensic Workbench Interface."""
+"""Ariadns Local Web UI Workbench Interface."""
 
 import http.server
 import json
@@ -24,7 +24,7 @@ def load_template_html() -> str:
     return "<html><body><h3>ARIADNS 網域公開情資分析平台</h3></body></html>"
 
 class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
-    """HTTP Request Handler serving the Ariadns Forensic Workbench."""
+    """HTTP Request Handler serving the Ariadns Workbench."""
 
     orchestrator: Optional[Orchestrator] = None
     output_dir: str = "./reports"
@@ -314,7 +314,7 @@ def start_web_ui(
     WorkbenchRequestHandler.output_dir = output_dir
 
     server = http.server.ThreadingHTTPServer((host, port), WorkbenchRequestHandler)
-    print(f"[*] Ariadns Forensic Workbench running at http://{host}:{port}/")
+    print(f"[*] Ariadns Workbench running at http://{host}:{port}/")
 
     if open_browser:
         webbrowser.open(f"http://{host}:{port}/")
