@@ -224,23 +224,26 @@
     .command-cards {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 6px;
     }
 
-    .card {
+    .card-btn {
       background: var(--bg-surface2);
       border: 1px solid var(--border-color);
       border-radius: 6px;
-      padding: 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .card-header {
+      padding: 8px 12px;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      cursor: pointer;
+      width: 100%;
+      text-align: left;
+      transition: all 0.15s ease;
+    }
+
+    .card-btn:hover:not(:disabled) {
+      background: var(--bg-surface-hover);
+      border-color: var(--accent-cyan);
     }
 
     .card-title {
@@ -258,23 +261,10 @@
       border-radius: 3px;
     }
 
-    .card-desc {
-      font-size: 12px;
-      color: var(--text-muted);
-      line-height: 1.4;
-    }
-
-    .card-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 8px;
-      margin-top: 4px;
-    }
-
     .card-opsec {
       background: rgba(248, 113, 113, 0.1);
       border: 1px solid rgba(248, 113, 113, 0.3);
-      padding: 8px 10px;
+      padding: 10px 12px;
       border-radius: 4px;
       font-size: 12px;
       color: #fca5a5;
@@ -315,8 +305,16 @@
     }
 
     /* Proposition Filter List */
+    .prop-section {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 240px;
+    }
+
     .prop-list {
-      max-height: 240px;
+      flex: 1;
+      max-height: 420px;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
@@ -357,9 +355,9 @@
 
     .prop-stmt {
       color: var(--text-muted);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      white-space: normal;
+      word-break: break-word;
+      line-height: 1.4;
       flex: 1;
     }
 
@@ -666,75 +664,46 @@
     <aside class="control-panel">
       <!-- Section 1: Visual CLI Command Cards -->
       <div>
-        <h2 class="section-title" id="txtCmdCardsTitle">調查模組</h2>
+        <div class="section-title">
+          <span id="txtCmdCardsTitle">調查模組</span>
+          <button type="button" class="btn btn-primary" id="btnAutoRun" onclick="autoRunSteps()">自動執行</button>
+        </div>
         <div class="command-cards">
           <!-- Card M1 -->
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title" id="txtM1Title">DNS 與基礎拓撲</span>
-              <span class="card-cmd">ariadns step -m m1</span>
-            </div>
-            <div class="card-desc" id="txtM1Desc">查詢權威 NS、MX、SOA 聯絡資訊、TXT 驗證紀錄與 A、AAAA 位址。</div>
-            <div class="card-actions">
-              <button type="button" class="btn btn-primary" id="btnRunM1" onclick="runStep('m1')">執行探測</button>
-            </div>
-          </div>
+          <button type="button" class="card-btn" id="cardBtnM1" onclick="runStep('m1')" title="查詢權威 NS、MX、SOA 聯絡資訊、TXT 驗證紀錄與 A、AAAA 位址。">
+            <span class="card-title" id="txtM1Title">DNS 與基礎拓撲</span>
+            <span class="card-cmd">ariadns step -m m1</span>
+          </button>
 
           <!-- Card M2 -->
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title" id="txtM2Title">子網域挖掘</span>
-              <span class="card-cmd">ariadns step -m m2</span>
-            </div>
-            <div class="card-desc" id="txtM2Desc">比對憑證透明度紀錄與字典清單，搜集關聯子網域。</div>
-            <div class="card-actions">
-              <button type="button" class="btn btn-primary" id="btnRunM2" onclick="runStep('m2')">執行挖掘</button>
-            </div>
-          </div>
+          <button type="button" class="card-btn" id="cardBtnM2" onclick="runStep('m2')" title="比對憑證透明度紀錄與字典清單，搜集關聯子網域。">
+            <span class="card-title" id="txtM2Title">子網域挖掘</span>
+            <span class="card-cmd">ariadns step -m m2</span>
+          </button>
 
           <!-- Card M3 -->
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title" id="txtM3Title">來源主機探測</span>
-              <span class="card-cmd">ariadns step -m m3</span>
-            </div>
-            <div class="card-desc" id="txtM3Desc">比對歷史解析紀錄、HTTP 標頭特徵與 Favicon 雜湊，找出 CDN 背後的來源主機。</div>
-            <div class="card-actions">
-              <button type="button" class="btn btn-primary" id="btnRunM3" onclick="runStep('m3')">探測來源</button>
-            </div>
-          </div>
+          <button type="button" class="card-btn" id="cardBtnM3" onclick="runStep('m3')" title="比對歷史解析紀錄、HTTP 標頭特徵與 Favicon 雜湊，找出 CDN 背後的來源主機。">
+            <span class="card-title" id="txtM3Title">來源主機探測</span>
+            <span class="card-cmd">ariadns step -m m3</span>
+          </button>
 
           <!-- Card M4 -->
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title" id="txtM4Title">關聯轉向分析</span>
-              <span class="card-cmd">ariadns step -m m4</span>
-            </div>
-            <div class="card-desc" id="txtM4Desc">由反向 IP、共用主機或憑證標記向外延伸，並過濾已知停泊清單。</div>
-            <div class="card-actions">
-              <button type="button" class="btn btn-primary" id="btnRunM4" onclick="runStep('m4')">執行轉向</button>
-            </div>
-          </div>
+          <button type="button" class="card-btn" id="cardBtnM4" onclick="runStep('m4')" title="由反向 IP、共用主機或憑證標記向外延伸，並過濾已知停泊清單。">
+            <span class="card-title" id="txtM4Title">關聯轉向分析</span>
+            <span class="card-cmd">ariadns step -m m4</span>
+          </button>
+
+          <!-- Card Trace -->
+          <button type="button" class="card-btn" id="cardBtnTrace" onclick="openTraceModal()" title="透過 tracert 追蹤路由躍遷節點，擷取目標前端最末幾跳上游機房與 ISP 路由資訊。">
+            <span class="card-title" id="txtTraceTitle">路由躍遷追蹤</span>
+            <span class="card-cmd">ariadns trace</span>
+          </button>
 
           <!-- Card M7 -->
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title" id="txtM7Title">主動回連驗證</span>
-              <span class="card-cmd">ariadns manual-oob</span>
-            </div>
-            <div class="card-desc" id="txtM7Desc">向指定端點發送包含自訂監聽位址的請求，確認原始主機連線。</div>
-            <div class="card-opsec">
-              <strong id="txtM7OpsecWarning">主動探測提醒</strong>
-              <span id="txtM7OpsecText">此操作會向外部目標送出網路流量，請先確認已獲得授權。</span>
-              <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                <input type="checkbox" id="m7AckRisk" onchange="toggleM7Button()">
-                <span id="txtM7OpsecAck">確認授權並繼續執行</span>
-              </label>
-            </div>
-            <div class="card-actions">
-              <button type="button" id="m7RunBtn" class="btn" disabled onclick="runStep('m7')">發送驗證</button>
-            </div>
-          </div>
+          <button type="button" class="card-btn" id="cardBtnM7" onclick="openM7Modal()" title="向指定端點發送包含自訂監聽位址的請求，確認原始主機連線。">
+            <span class="card-title" id="txtM7Title">主動回連驗證</span>
+            <span class="card-cmd">ariadns manual-oob</span>
+          </button>
         </div>
       </div>
 
@@ -750,7 +719,7 @@
       </div>
 
       <!-- Section 3: Node Selection & Graph Rendering -->
-      <div>
+      <div class="prop-section">
         <div class="section-title">
           <span id="txtPropTitle">證據節點</span>
           <span id="txtPropSubtitle" style="font-size: 12px; text-transform: none; color: var(--text-faint);">選擇繪入結構圖的項目</span>
@@ -758,7 +727,17 @@
         <div class="prop-list" id="propList">
           <div class="empty-state" id="txtPropEmpty" style="padding: 10px;">請先載入網域以檢視證據節點。</div>
         </div>
-        <div style="margin-top: 10px; display: flex; justify-content: flex-end;">
+        <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--text-main);">
+            <label style="display: inline-flex; align-items: center; gap: 4px; cursor: pointer;">
+              <input type="checkbox" id="chkColorCoding" checked>
+              <span id="lblChkColor">顏色提示</span>
+            </label>
+            <label style="display: inline-flex; align-items: center; gap: 4px; cursor: pointer;">
+              <input type="checkbox" id="chkShowLegend" checked>
+              <span id="lblChkLegend">圖例說明</span>
+            </label>
+          </div>
           <button type="button" class="btn btn-accent" id="btnRenderGraph" onclick="renderEvidenceGraph()">
             生成證據結構圖
           </button>
@@ -910,6 +889,66 @@
     </div>
   </div>
 
+  <!-- Trace Confirmation & Parameters Modal -->
+  <div id="traceModal" class="modal-backdrop" style="display: none;">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="traceModalTitle" class="modal-title">路由躍遷追蹤設定 (tracert)</h3>
+        <button type="button" class="modal-close-btn" onclick="closeTraceModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="setting-group">
+          <label style="cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-main);">
+            <input type="checkbox" id="traceNoRdns" checked>
+            <span id="lblTraceNoRdns">不反解主機名稱 (-d)，加速追蹤並由本機離線 enrichment</span>
+          </label>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+          <div class="setting-group">
+            <label id="lblTraceMaxHops" class="setting-label">最大躍遷數 (-h)</label>
+            <input type="number" id="traceMaxHops" class="setting-select" value="20" min="1" max="64">
+          </div>
+          <div class="setting-group">
+            <label id="lblTraceTimeout" class="setting-label">逾時毫秒 (-w)</label>
+            <input type="number" id="traceTimeout" class="setting-select" value="500" min="100" max="5000" step="100">
+          </div>
+          <div class="setting-group">
+            <label id="lblTraceTailHops" class="setting-label">保留末幾跳</label>
+            <input type="number" id="traceTailHops" class="setting-select" value="3" min="1" max="10">
+          </div>
+        </div>
+        <div class="card-opsec">
+          <strong id="txtTraceOpsecWarning">確定執行？ (主動探測提醒)</strong>
+          <span id="txtTraceOpsecText">此操作會向目標與沿途路由器發送 ICMP 探測封包，僅保留目標前端最末幾跳有效公網節點並進行 ASN/ISP 比對。請先確認已獲得授權。</span>
+        </div>
+      </div>
+      <div class="modal-footer" style="gap: 8px;">
+        <button type="button" class="btn" id="btnCancelTrace" onclick="closeTraceModal()">取消</button>
+        <button type="button" class="btn btn-primary" id="btnConfirmTrace" onclick="confirmAndRunTrace()">確定執行</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- M7 Active Callback Confirmation Modal -->
+  <div id="m7Modal" class="modal-backdrop" style="display: none;">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="m7ModalTitle" class="modal-title">確定執行？</h3>
+        <button type="button" class="modal-close-btn" onclick="closeM7Modal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="card-opsec">
+          <strong id="txtM7OpsecWarning">主動探測提醒</strong>
+          <span id="txtM7OpsecText">此操作會向外部目標送出網路流量，請先確認已獲得授權。</span>
+        </div>
+      </div>
+      <div class="modal-footer" style="gap: 8px;">
+        <button type="button" class="btn" id="btnCancelM7" onclick="closeM7Modal()">取消</button>
+        <button type="button" class="btn btn-primary" id="btnConfirmM7" onclick="confirmAndRunM7()">確定執行</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Interactive Workbench Script -->
   <script>
     const TRANSLATIONS = {
@@ -930,6 +969,7 @@
 
         // Command Cards
         cmdCardsTitle: "調查模組",
+        autoRunBtn: "自動執行",
         m1Title: "DNS 與基礎拓撲",
         m1Desc: "查詢權威 NS、MX、SOA 聯絡資訊、TXT 驗證紀錄與 A、AAAA 位址。",
         m1Btn: "執行探測",
@@ -942,12 +982,16 @@
         m4Title: "關聯轉向分析",
         m4Desc: "由反向 IP、共用主機或憑證標記向外延伸，並過濾已知停泊清單。",
         m4Btn: "執行轉向",
+        traceTitle: "路由躍遷追蹤",
+        traceDesc: "透過 tracert 追蹤路由躍遷節點，擷取目標前端最末幾跳上游機房與 ISP 路由資訊。",
         m7Title: "主動回連驗證",
         m7Desc: "向指定端點發送包含自訂監聽位址的請求，確認原始主機連線。",
         m7OpsecWarning: "主動探測提醒",
         m7OpsecText: "此操作會向外部目標送出網路流量，請先確認已獲得授權。",
         m7OpsecAck: "確認授權並繼續執行",
         m7Btn: "發送驗證",
+        chkColor: "顏色提示",
+        chkLegend: "圖例說明",
 
         // Prerequisite Guidance
         m3PrereqWarning: "尚未搜集目標的基礎 DNS 與 IP 資訊。建議先執行「DNS 與基礎拓撲」或參考下方的「建議下一步」。",
@@ -1050,6 +1094,7 @@
 
         // Command Cards
         cmdCardsTitle: "Visual CLI Command Cards",
+        autoRunBtn: "Auto Run",
         m1Title: "DNS & Infrastructure Topology",
         m1Desc: "Probe authoritative NS, MX, SOA email, TXT verification tokens, and A/AAAA IPs.",
         m1Btn: "Run Probe",
@@ -1062,12 +1107,16 @@
         m4Title: "Infrastructure Pivoting",
         m4Desc: "Reverse IP, custom MX/NS, and shared token pivoting with 7-day warninglist filtering.",
         m4Btn: "Pivot",
+        traceTitle: "Route Hop Trace",
+        traceDesc: "Active traceroute to extract upstream gateway and ISP hops immediately preceding the target.",
         m7Title: "Active Callback Verification",
         m7Desc: "Isolated active callback injection to verify origin infrastructure.",
         m7OpsecWarning: "Active Probe Advisory",
         m7OpsecText: "Generates live outbound callback traffic to external target. Requires explicit authorization.",
         m7OpsecAck: "Confirm authorization and proceed",
         m7Btn: "Trigger Probe",
+        chkColor: "Color Coding",
+        chkLegend: "Show Legend",
 
         // Prerequisite Guidance
         m3PrereqWarning: "No baseline DNS or IP records collected yet. It is recommended to run 'DNS & Infrastructure Topology' first or follow 'Next-Step Recommendations'.",
@@ -1196,28 +1245,31 @@
 
       // Command Cards
       document.getElementById("txtCmdCardsTitle").textContent = t.cmdCardsTitle;
+      if (document.getElementById("btnAutoRun")) {
+        document.getElementById("btnAutoRun").textContent = t.autoRunBtn;
+      }
       document.getElementById("txtM1Title").textContent = t.m1Title;
-      document.getElementById("txtM1Desc").textContent = t.m1Desc;
-      document.getElementById("btnRunM1").textContent = t.m1Btn;
+      if (document.getElementById("cardBtnM1")) document.getElementById("cardBtnM1").title = t.m1Desc;
 
       document.getElementById("txtM2Title").textContent = t.m2Title;
-      document.getElementById("txtM2Desc").textContent = t.m2Desc;
-      document.getElementById("btnRunM2").textContent = t.m2Btn;
+      if (document.getElementById("cardBtnM2")) document.getElementById("cardBtnM2").title = t.m2Desc;
 
       document.getElementById("txtM3Title").textContent = t.m3Title;
-      document.getElementById("txtM3Desc").textContent = t.m3Desc;
-      document.getElementById("btnRunM3").textContent = t.m3Btn;
+      if (document.getElementById("cardBtnM3")) document.getElementById("cardBtnM3").title = t.m3Desc;
 
       document.getElementById("txtM4Title").textContent = t.m4Title;
-      document.getElementById("txtM4Desc").textContent = t.m4Desc;
-      document.getElementById("btnRunM4").textContent = t.m4Btn;
+      if (document.getElementById("cardBtnM4")) document.getElementById("cardBtnM4").title = t.m4Desc;
+
+      if (document.getElementById("txtTraceTitle")) document.getElementById("txtTraceTitle").textContent = t.traceTitle;
+      if (document.getElementById("cardBtnTrace")) document.getElementById("cardBtnTrace").title = t.traceDesc;
 
       document.getElementById("txtM7Title").textContent = t.m7Title;
-      document.getElementById("txtM7Desc").textContent = t.m7Desc;
-      document.getElementById("txtM7OpsecWarning").textContent = t.m7OpsecWarning;
-      document.getElementById("txtM7OpsecText").textContent = t.m7OpsecText;
-      document.getElementById("txtM7OpsecAck").textContent = t.m7OpsecAck;
-      document.getElementById("m7RunBtn").textContent = t.m7Btn;
+      if (document.getElementById("cardBtnM7")) document.getElementById("cardBtnM7").title = t.m7Desc;
+      if (document.getElementById("txtM7OpsecWarning")) document.getElementById("txtM7OpsecWarning").textContent = t.m7OpsecWarning;
+      if (document.getElementById("txtM7OpsecText")) document.getElementById("txtM7OpsecText").textContent = t.m7OpsecText;
+
+      if (document.getElementById("lblChkColor")) document.getElementById("lblChkColor").textContent = t.chkColor;
+      if (document.getElementById("lblChkLegend")) document.getElementById("lblChkLegend").textContent = t.chkLegend;
 
       // Recommendations
       document.getElementById("txtRecTitle").textContent = t.recTitle;
@@ -1702,7 +1754,102 @@
       }
     }
 
-    async function runStep(moduleName, target) {
+    function openTraceModal() {
+      const t = TRANSLATIONS[currentLang];
+      const actualTarget = currentSession || document.getElementById("domainInput").value.trim();
+      if (!actualTarget) {
+        alert(t.enterDomainAlert);
+        return;
+      }
+      document.getElementById("traceModal").style.display = "flex";
+    }
+
+    function closeTraceModal() {
+      document.getElementById("traceModal").style.display = "none";
+    }
+
+    async function confirmAndRunTrace() {
+      const noRdns = document.getElementById("traceNoRdns").checked;
+      const maxHops = parseInt(document.getElementById("traceMaxHops").value, 10) || 20;
+      const timeoutMs = parseInt(document.getElementById("traceTimeout").value, 10) || 500;
+      const tailHops = parseInt(document.getElementById("traceTailHops").value, 10) || 3;
+      closeTraceModal();
+      await runStep("trace", undefined, {
+        no_rdns: noRdns,
+        max_hops: maxHops,
+        timeout_ms: timeoutMs,
+        tail_hops: tailHops,
+        acknowledge_risk: true
+      });
+    }
+
+    function openM7Modal() {
+      const t = TRANSLATIONS[currentLang];
+      const actualTarget = currentSession || document.getElementById("domainInput").value.trim();
+      if (!actualTarget) {
+        alert(t.enterDomainAlert);
+        return;
+      }
+      document.getElementById("m7Modal").style.display = "flex";
+    }
+
+    function closeM7Modal() {
+      document.getElementById("m7Modal").style.display = "none";
+    }
+
+    async function confirmAndRunM7() {
+      closeM7Modal();
+      await runStep("m7", undefined, { acknowledge_risk: true });
+    }
+
+    async function autoRunSteps() {
+      const t = TRANSLATIONS[currentLang];
+      const actualTarget = currentSession || document.getElementById("domainInput").value.trim();
+      if (!actualTarget) {
+        alert(t.enterDomainAlert);
+        return;
+      }
+      if (!currentSession) {
+        currentSession = actualTarget;
+        document.getElementById("domainInput").value = currentSession;
+        clearSessionDisplays();
+      }
+
+      const btn = document.getElementById("btnAutoRun");
+      if (btn) btn.disabled = true;
+
+      startStopwatch();
+      const modules = ["m1", "m2", "m3", "m4"];
+      try {
+        for (const mod of modules) {
+          document.getElementById("indModule").textContent = mod.toUpperCase();
+          document.getElementById("indProgress").textContent = t.runningStatus;
+          document.getElementById("indTarget").textContent = actualTarget;
+          await fetch("/api/step", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              session_id: currentSession,
+              module: mod,
+              target: actualTarget,
+              params: { depth: parseInt(currentDepth, 10) || 1, lang: currentLang }
+            })
+          });
+        }
+        stopStopwatch();
+        document.getElementById("indProgress").textContent = t.doneStatus;
+        // Refresh recommendations and evidence propositions list without auto-rendering graph
+        await loadSession(true);
+      } catch (err) {
+        stopStopwatch();
+        document.getElementById("indProgress").textContent = "FAILED";
+        console.error("AutoRun execution error:", err);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    async function runStep(moduleName, target, extraParams = {}) {
       const t = TRANSLATIONS[currentLang];
       const actualTarget = target || currentSession || document.getElementById("domainInput").value.trim();
       if (!actualTarget) {
@@ -1739,7 +1886,7 @@
             session_id: currentSession,
             module: moduleName,
             target: actualTarget,
-            params: { depth: parseInt(currentDepth, 10) || 1 }
+            params: Object.assign({ depth: parseInt(currentDepth, 10) || 1, lang: currentLang }, extraParams)
           })
         });
         const res = await resp.json();
@@ -1762,6 +1909,8 @@
         return;
       }
       const selectedChecks = Array.from(document.querySelectorAll(".prop-check:checked")).map(cb => cb.value);
+      const colorCoding = document.getElementById("chkColorCoding") ? document.getElementById("chkColorCoding").checked : true;
+      const showLegend = document.getElementById("chkShowLegend") ? document.getElementById("chkShowLegend").checked : true;
       document.getElementById("indProgress").textContent = t.renderingStatus;
 
       startStopwatch();
@@ -1771,7 +1920,10 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             session_id: currentSession,
-            selected_prop_ids: selectedChecks
+            selected_prop_ids: selectedChecks,
+            color_coding: colorCoding,
+            show_legend: showLegend,
+            lang: currentLang
           })
         });
         const data = await resp.json();

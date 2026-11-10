@@ -245,3 +245,37 @@ def test_semantic_svg_renderer_multiline_colors_and_legend_toggles(tmp_path):
     assert "#10b981" not in svg_content2
     assert "stroke-dasharray" not in svg_content2
     assert "圖例說明" not in svg_content2
+
+
+def test_ui_compact_cards_autorun_modals_and_render_checkboxes():
+    tpl_path = Path(__file__).parent.parent / "src" / "ariadns" / "interfaces" / "templates" / "workbench.html"
+    html = tpl_path.read_text(encoding="utf-8")
+
+    # 1. Auto-run button next to module section title
+    assert 'id="btnAutoRun"' in html
+    assert "autoRunSteps()" in html
+
+    # 2. Compact clickable button cards with hover tooltips
+    assert 'id="cardBtnM1"' in html
+    assert 'id="cardBtnM2"' in html
+    assert 'id="cardBtnM3"' in html
+    assert 'id="cardBtnM4"' in html
+    assert 'id="cardBtnTrace"' in html
+    assert 'id="cardBtnM7"' in html
+
+    # 3. Trace & M7 Confirmation Modals with default parameters (-d, 20, 500, 3)
+    assert 'id="traceModal"' in html
+    assert 'id="traceNoRdns" checked' in html
+    assert 'id="traceMaxHops"' in html and 'value="20"' in html
+    assert 'id="traceTimeout"' in html and 'value="500"' in html
+    assert 'id="traceTailHops"' in html and 'value="3"' in html
+    assert 'id="m7Modal"' in html
+    assert "確定執行？" in html
+
+    # 4. Color coding and Show legend default-checked checkboxes next to render button
+    assert 'id="chkColorCoding" checked' in html
+    assert 'id="chkShowLegend" checked' in html
+    assert "顏色提示" in html
+    assert "圖例說明" in html
+    assert "color_coding: colorCoding" in html
+    assert "show_legend: showLegend" in html
