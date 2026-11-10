@@ -127,3 +127,111 @@ def test_ticket_36_causal_chain_linking_ranks_and_structured_statements(tmp_path
     assert f_tr.rank >= 1
     assert (f_tr.premises[0], "F_TRACE") in edges
     assert "【依據】" in f_tr.statement and "【方法】" in f_tr.statement and "【結果】" in f_tr.statement
+
+
+def test_ticket_37_svg_edge_method_pills_and_node_badges(tmp_path):
+    from ariadns.modules.m6_reporting import render_evidence_artifacts
+    from ariadns.models.entities import DataCustodian
+
+    db_file = tmp_path / "test_svg_pills.db"
+    db = DatabaseManager(str(db_file))
+
+    nodes = [
+        PropositionNode(
+            prop_id="F1",
+            node_kind="FACT",
+            rank=0,
+            statement="【依據】調查目標網域 ofa177.net 【方法】本地 DNS 解析與 HTTP 標頭探測 【結果】解析至 A:['182.173.0.181']，CDN:False (無)，Server:nginx",
+            target_entity="ofa177.net",
+            entity_type="DOMAIN_L1",
+        ),
+        PropositionNode(
+            prop_id="182_173_0_181_F1",
+            node_kind="FACT",
+            rank=1,
+            premises=["F1"],
+            statement="【依據】F1（解析紀錄包含 182.173.0.181） 【方法】Team Cymru BGP/ASN 與 HTTP 標頭探測 【結果】主機 IP 182.173.0.181 歸屬於 AS3462 (Chunghwa Telecom)，Server 標頭: nginx，CDN 代理: False",
+            target_entity="182.173.0.181",
+            entity_type="IP",
+        ),
+        PropositionNode(
+            prop_id="F_SUB_1",
+            node_kind="FACT",
+            rank=1,
+            premises=["F1"],
+            statement="【依據】F1（根網域 ofa177.net） 【方法】被動憑證透明度 (CT) 與 DNS 字典枚舉 【結果】子網域 api.ofa177.net 解析至 182.173.0.182（伺服器: nginx）",
+            target_entity="api.ofa177.net",
+            entity_type="SUBDOMAIN",
+        ),
+        PropositionNode(
+            prop_id="F_ORIGIN",
+            node_kind="FACT",
+            rank=1,
+            premises=["F1"],
+            statement="【依據】F1（受保護網域 ofa177.net） 【方法】被動 DNS 歷史紀錄回溯與 HTTP Host / Favicon 碰撞探測 【結果】發現候選真實來源主機 IP 182.173.0.181（狀態: CONFIRMED）",
+            target_entity="182.173.0.181",
+            entity_type="IP",
+        ),
+        PropositionNode(
+            prop_id="F_PIVOT_1",
+            node_kind="FACT",
+            rank=2,
+            premises=["182_173_0_181_F1"],
+            statement="【依據】182_173_0_181_F1（182.173.0.181） 【方法】reverse_ip 關聯反查與 7 天誤報過濾 【結果】橫向轉向發現共構關聯網域 sibling-ofa177.net",
+            target_entity="sibling-ofa177.net",
+            entity_type="DOMAIN_L2",
+        ),
+        PropositionNode(
+            prop_id="F_TRACE",
+            node_kind="FACT",
+            rank=2,
+            premises=["182_173_0_181_F1"],
+            statement="【依據】182_173_0_181_F1（目標 IP 182.173.0.181） 【方法】tracert 路由躍遷追蹤與 Team Cymru 骨幹 ASN 查詢 【結果】路由躍遷追蹤至 182.173.0.181",
+            target_entity="182.173.0.181",
+            entity_type="IP",
+            rule_name="RULE_ACTIVE_TRACEROUTE"
+        ),
+        PropositionNode(
+            prop_id="182_173_0_181_C1",
+            node_kind="CONCLUSION",
+            rank=2,
+            premises=["182_173_0_181_F1"],
+            statement="【依據】182_173_0_181_F1 【方法】因果歸納與資料保管單位映射 【結果】已確認主機 IP 182.173.0.181 之網路電信商與機房歸屬（Chunghwa Telecom）",
+            target_entity="182.173.0.181",
+            entity_type="IP",
+            custodians=[DataCustodian("Chunghwa Telecom", "ISP", "IP:182.173.0.181", ["NetFlow", "KYC"])],
+        ),
+    ]
+
+    edges = [
+        ("F1", "182_173_0_181_F1"),
+        ("F1", "F_SUB_1"),
+        ("F1", "F_ORIGIN"),
+        ("182_173_0_181_F1", "F_PIVOT_1"),
+        ("182_173_0_181_F1", "F_TRACE"),
+        ("182_173_0_181_F1", "182_173_0_181_C1"),
+    ]
+    db.save_normalized_evidence("ofa177.net", nodes, edges)
+
+    svg_path, png_path, _, _ = render_evidence_artifacts(
+        "ofa177.net", db, tmp_path, color_coding=True, show_legend=True, lang="zh"
+    )
+    svg_content = svg_path.read_text(encoding="utf-8")
+
+    # 1. Edge midpoint pills present
+    assert "A紀錄 ➔ ASN歸屬探測" in svg_content
+    assert "子網域枚舉" in svg_content
+    assert "來源碰撞探測" in svg_content
+    assert "橫向共構轉向" in svg_content
+    assert "路由躍遷追蹤" in svg_content
+    assert "事實推導 ➔ 調閱結論" in svg_content
+
+    # 2. Node method badges present in headers
+    assert "M1:DNS探測" in svg_content
+    assert "M1:ASN/BGP" in svg_content
+    assert "M2:子網域" in svg_content
+    assert "M3:來源探測" in svg_content
+    assert "M4:關聯轉向" in svg_content
+    assert "M9:路由追蹤" in svg_content
+    assert "鑑識調閱" in svg_content
+

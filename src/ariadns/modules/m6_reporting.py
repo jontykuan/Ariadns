@@ -128,6 +128,51 @@ def render_evidence_artifacts(
             return ("#a855f7", ' stroke-dasharray="6,4"')  # Dashed purple: Pivot correlation
         return ("#94a3b8", "")                             # Solid slate: Direct deduction
 
+    def _derive_edge_label(u_id: str, v_id: str, lang: str = "zh") -> str:
+        is_zh = (lang == "zh")
+        u_node = prop_lookup.get(u_id)
+        v_node = prop_lookup.get(v_id)
+        v_pid = v_id.upper()
+
+        if "TRACE" in v_pid or (v_node and v_node.rule_name == "RULE_ACTIVE_TRACEROUTE"):
+            return "路由躍遷追蹤" if is_zh else "Route Hop Trace"
+        if "OOB" in v_pid or (v_node and v_node.rule_name == "RULE_ACTIVE_OOB_PROBE"):
+            return "主動回連探測" if is_zh else "Active OOB Probe"
+        if "SUB" in v_pid:
+            return "網域 ➔ 子網域枚舉" if is_zh else "Domain ➔ Subdomain Enum"
+        if "ORIGIN" in v_pid:
+            return "受保護網域 ➔ 來源碰撞探測" if is_zh else "Domain ➔ Origin Probe"
+        if "PIVOT" in v_pid:
+            return "橫向共構轉向" if is_zh else "Pivot Correlation"
+        if "F1" in v_pid and ("F1" in u_id or u_id == "F1"):
+            return "A紀錄 ➔ ASN歸屬探測" if is_zh else "A Rec ➔ ASN Probe"
+        if v_node and (v_node.node_kind == "CONCLUSION" or v_node.custodians):
+            return "事實推導 ➔ 調閱結論" if is_zh else "Fact ➔ Custodian Conclusion"
+        return "因果推導" if is_zh else "Deduction"
+
+    def _derive_node_method_badge(node: PropositionNode, lang: str = "zh") -> str:
+        is_zh = (lang == "zh")
+        pid = node.prop_id.upper()
+        if node.node_kind == "CONCLUSION":
+            return "鑑識調閱" if is_zh else "Custody"
+        if "TRACE" in pid or node.rule_name == "RULE_ACTIVE_TRACEROUTE":
+            return "M9:路由追蹤" if is_zh else "M9:Trace"
+        if "OOB" in pid or node.rule_name == "RULE_ACTIVE_OOB_PROBE":
+            return "M7:回連探測" if is_zh else "M7:OOB"
+        if "ORIGIN" in pid or "UNPROXIED" in pid:
+            return "M3:來源探測" if is_zh else "M3:Origin"
+        if "SUB" in pid:
+            return "M2:子網域" if is_zh else "M2:Subdomain"
+        if "PIVOT" in pid:
+            return "M4:關聯轉向" if is_zh else "M4:Pivot"
+        if "F1" in pid:
+            if node.entity_type == "IP":
+                return "M1:ASN/BGP" if is_zh else "M1:ASN/BGP"
+            return "M1:DNS探測" if is_zh else "M1:DNS"
+        if "F2" in pid:
+            return "M1:RDAP/TXT" if is_zh else "M1:RDAP"
+        return "M1:探測" if is_zh else "M1:Probe"
+
     # 1. Generate Static SVG
     svg_lines = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {svg_w} {svg_h}" width="{svg_w}" height="{svg_h}" style="background-color: #0f172a; font-family: sans-serif;">',
@@ -138,7 +183,7 @@ def render_evidence_artifacts(
         '  </defs>',
     ]
 
-    # Draw edges
+    # Draw edges with midpoint method pills
     for u, v in rendered_edges:
         if u in positions and v in positions:
             ux, uy = positions[u]
@@ -148,7 +193,20 @@ def render_evidence_artifacts(
             x2 = vx + box_w // 2
             y2 = vy
             e_color, e_dash = _classify_edge_style(u, v)
+            edge_lbl = _derive_edge_label(u, v, lang=lang)
             svg_lines.append(f'  <line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{e_color}" stroke-width="2"{e_dash} marker-end="url(#arrow)"/>')
+
+            # Midpoint pill badge
+            mx = (x1 + x2) // 2
+            my = (y1 + y2) // 2
+            pill_w = max(76, len(edge_lbl) * 12 + 18)
+            pill_h = 20
+            px = mx - pill_w // 2
+            py = my - pill_h // 2
+            svg_lines.extend([
+                f'  <rect x="{px}" y="{py}" width="{pill_w}" height="{pill_h}" rx="4" fill="#0b1329" stroke="{e_color}" stroke-width="1.2"/>',
+                f'  <text x="{mx}" y="{my + 4}" fill="#cbd5e1" font-size="10" font-weight="bold" text-anchor="middle">{edge_lbl}</text>'
+            ])
 
     # Draw nodes with multi-line wrapped statements (no premature 32-char truncation)
     for p in rendered_props:
@@ -156,6 +214,7 @@ def render_evidence_artifacts(
         is_fact = (p.node_kind == "FACT")
         stroke_color, header_color = _classify_node_colors(p)
         badge = "FACT" if is_fact else "CONCLUSION"
+        method_badge = _derive_node_method_badge(p, lang=lang)
 
         wrapped_lines = textwrap.wrap(p.statement, width=42)[:4]
         if not wrapped_lines:
@@ -164,7 +223,7 @@ def render_evidence_artifacts(
         svg_lines.extend([
             f'  <rect x="{x}" y="{y}" width="{box_w}" height="{box_h}" rx="6" fill="#1e293b" stroke="{stroke_color}" stroke-width="2"/>',
             f'  <rect x="{x}" y="{y}" width="{box_w}" height="24" rx="6" fill="{header_color}"/>',
-            f'  <text x="{x + 8}" y="{y + 16}" fill="#ffffff" font-size="11" font-weight="bold">[{badge}] {p.prop_id}</text>',
+            f'  <text x="{x + 8}" y="{y + 16}" fill="#ffffff" font-size="11" font-weight="bold">[{badge}] {p.prop_id} | {method_badge}</text>',
         ])
         for line_idx, w_line in enumerate(wrapped_lines):
             safe_line = w_line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
@@ -228,16 +287,24 @@ def render_evidence_artifacts(
                 x2, y2 = vx + box_w // 2, vy
                 e_color, _ = _classify_edge_style(u, v)
                 draw.line([(x1, y1), (x2, y2)], fill=e_color, width=2)
+                edge_lbl = _derive_edge_label(u, v, lang=lang)
+                mx = (x1 + x2) // 2
+                my = (y1 + y2) // 2
+                pill_w = max(76, len(edge_lbl) * 11 + 16)
+                pill_h = 18
+                draw.rounded_rectangle([mx - pill_w // 2, my - pill_h // 2, mx + pill_w // 2, my + pill_h // 2], radius=4, fill="#0b1329", outline=e_color, width=1)
+                draw.text((mx - pill_w // 2 + 6, my - 6), edge_lbl, fill="#cbd5e1")
 
         for p in rendered_props:
             x, y = positions[p.prop_id]
             is_fact = (p.node_kind == "FACT")
             stroke_c, header_c = _classify_node_colors(p)
             badge = "FACT" if is_fact else "CONCLUSION"
+            method_badge = _derive_node_method_badge(p, lang=lang)
 
             draw.rounded_rectangle([x, y, x + box_w, y + box_h], radius=6, fill="#1e293b", outline=stroke_c, width=2)
             draw.rectangle([x, y, x + box_w, y + 24], fill=header_c)
-            draw.text((x + 8, y + 5), f"[{badge}] {p.prop_id}", fill="#ffffff")
+            draw.text((x + 8, y + 5), f"[{badge}] {p.prop_id} | {method_badge}", fill="#ffffff")
             wrapped_lines = textwrap.wrap(p.statement, width=42)[:4]
             for l_idx, w_line in enumerate(wrapped_lines):
                 draw.text((x + 8, y + 32 + l_idx * 16), w_line, fill="#e2e8f0")
