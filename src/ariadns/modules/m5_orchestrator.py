@@ -554,7 +554,7 @@ class Orchestrator:
                 added_fact_ids.append(f_id)
 
         elif module_name in ("trace", "m9"):
-            ack_opsec = bool(params.get("ack_opsec", False))
+            ack_opsec = bool(params.get("ack_opsec", False) or params.get("acknowledge_risk", False))
             if not ack_opsec:
                 raise ValueError("OPSEC authorization required (ack_opsec=True) to execute active route trace.")
             no_rdns = bool(params.get("no_rdns", True))
@@ -581,6 +581,14 @@ class Orchestrator:
                 ack_opsec=True,
             )
             hops_list = trace_res.get("tail_hops", [])
+            f_trace_id = "F_TRACE"
+            c_trace_id = "C_TRACE"
+            parent_premises: list[str] = []
+            for p in existing_props:
+                if p.target_entity == trace_target or trace_target in p.statement:
+                    parent_premises.append(p.prop_id)
+                    break
+
             if hops_list:
                 hop_summaries = [
                     f"Hop#{h['hop']}:{h['ip']}({h.get('asn') or 'AS?'}/{h.get('ptr') or h.get('asn_org_name') or 'Router'})"
@@ -589,14 +597,6 @@ class Orchestrator:
                 hops_str = " -> ".join(hop_summaries)
                 last_hop = hops_list[-1]
                 upstream_org = last_hop.get("asn_org_name") or last_hop.get("asn") or ("上游電信路由機房" if is_zh else "Upstream Transit ISP")
-
-                f_trace_id = "F_TRACE"
-                c_trace_id = "C_TRACE"
-                parent_premises: list[str] = []
-                for p in existing_props:
-                    if p.target_entity == trace_target or trace_target in p.statement:
-                        parent_premises.append(p.prop_id)
-                        break
 
                 stmt_f = (
                     f"路由躍遷追蹤（末 {len(hops_list)} 跳）至 {trace_target}: {hops_str}"
@@ -640,6 +640,61 @@ class Orchestrator:
                     new_edges.append((pp, f_trace_id))
                 new_edges.append((f_trace_id, c_trace_id))
                 added_fact_ids.append(f_trace_id)
+            else:
+                stmt_f = (
+                    f"已對 {trace_target} 執行路由躍遷追蹤（-h {max_hops} -w {timeout_ms}），惟沿途公網節點均封鎖 ICMP 或逾時未回應"
+                    if is_zh else
+                    f"Executed route hop trace (-h {max_hops} -w {timeout_ms}) toward {trace_target}, but intermediate public hops filtered ICMP or timed out"
+                )
+                f_node = PropositionNode(
+                    prop_id=f_trace_id,
+                    node_kind=PropositionKind.FACT.value,
+                    rank=1 if parent_premises else 0,
+                    statement=stmt_f,
+                    premises=parent_premises,
+                    rule_name="RULE_ACTIVE_TRACEROUTE",
+                    target_entity=trace_target,
+                    entity_type="IP"
+                )
+                new_props.append(f_node)
+                for pp in parent_premises:
+                    new_edges.append((pp, f_trace_id))
+                added_fact_ids.append(f_trace_id)
+
+        elif module_name == "m7":
+            ack_opsec = bool(params.get("ack_opsec", False) or params.get("acknowledge_risk", False))
+            if not ack_opsec:
+                raise ValueError("OPSEC authorization required (ack_opsec=True) to execute active callback probe.")
+            from ariadns.modules.m7_manual_oob import trigger_manual_oob
+            target_url = params.get("target_url") or f"http://{target}/"
+            callback_url = params.get("callback_url") or "http://127.0.0.1:8080/oob-canary"
+            oob_res = trigger_manual_oob(
+                target_endpoint_url=target_url,
+                callback_url=callback_url,
+                acknowledge_opsec_risk=True,
+                timeout_seconds=3.0,
+            )
+            f_oob_id = "F_OOB"
+            status_code = oob_res.get("target_status_code", "TIMEOUT")
+            stmt_oob = (
+                f"已對 {target_url} 發送主動回連驗證請求（HTTP 狀態: {status_code}）"
+                if is_zh else
+                f"Active OOB callback verification probe sent to {target_url} (HTTP Status: {status_code})"
+            )
+            f_node = PropositionNode(
+                prop_id=f_oob_id,
+                node_kind=PropositionKind.FACT.value,
+                rank=1,
+                statement=stmt_oob,
+                premises=["F1"] if "F1" in existing_prop_ids else [],
+                rule_name="RULE_ACTIVE_OOB_PROBE",
+                target_entity=target,
+                entity_type="IP" if is_ip_target else "DOMAIN_L1"
+            )
+            new_props.append(f_node)
+            if "F1" in existing_prop_ids:
+                new_edges.append(("F1", f_oob_id))
+            added_fact_ids.append(f_oob_id)
 
         # Save merged propositions without overwriting previous steps
         self.db.save_normalized_evidence(session_id, new_props, new_edges, replace=False)

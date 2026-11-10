@@ -279,3 +279,36 @@ def test_ui_compact_cards_autorun_modals_and_render_checkboxes():
     assert "圖例說明" in html
     assert "color_coding: colorCoding" in html
     assert "show_legend: showLegend" in html
+    assert "ack_opsec: true" in html
+
+
+def test_web_ui_trace_and_m7_step_with_acknowledge_risk(tmp_path, monkeypatch):
+    import subprocess
+    db_file = tmp_path / "test_trace_ui.db"
+    db = DatabaseManager(str(db_file))
+    cfg = AppConfig(db_path=str(db_file))
+    orch = Orchestrator(config=cfg, db=db)
+
+    class DummyCompletedProcess:
+        def __init__(self, stdout):
+            self.stdout = stdout
+            self.returncode = 0
+
+    # Simulate web UI sending acknowledge_risk: True (from confirmAndRunTrace)
+    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: DummyCompletedProcess("  1     5 ms     4 ms     5 ms  168.95.98.254\n  2    10 ms    10 ms    10 ms  182.173.0.181\n"))
+    monkeypatch.setattr("ariadns.modules.m9_traceroute.resolve_ip_asn_details", lambda ip: {"asn": "AS3462", "asn_org_name": "Chunghwa Telecom", "country": "TW"})
+    monkeypatch.setattr("ariadns.modules.m9_traceroute.resolve_ptr", lambda ip: "")
+
+    entry = orch.run_step("ofa177.net", "trace", "182.173.0.181", params={
+        "no_rdns": True,
+        "max_hops": 20,
+        "timeout_ms": 500,
+        "tail_hops": 3,
+        "acknowledge_risk": True,
+        "lang": "zh",
+    })
+    assert entry.module_name == "trace"
+    assert "F_TRACE" in entry.added_fact_ids
+    logs = db.get_audit_logs("ofa177.net")
+    assert len(logs) == 1
+    assert logs[0].module_name == "trace"

@@ -1779,6 +1779,7 @@
         max_hops: maxHops,
         timeout_ms: timeoutMs,
         tail_hops: tailHops,
+        ack_opsec: true,
         acknowledge_risk: true
       });
     }
@@ -1799,7 +1800,7 @@
 
     async function confirmAndRunM7() {
       closeM7Modal();
-      await runStep("m7", undefined, { acknowledge_risk: true });
+      await runStep("m7", undefined, { ack_opsec: true, acknowledge_risk: true });
     }
 
     async function autoRunSteps() {
@@ -1891,6 +1892,11 @@
         });
         const res = await resp.json();
         stopStopwatch();
+        if (!resp.ok || res.status === "ERROR") {
+          document.getElementById("indProgress").textContent = "FAILED";
+          alert(res.message || "Execution failed");
+          return;
+        }
         document.getElementById("indProgress").textContent = t.doneStatus;
 
         // Reload updated session data while preserving elapsed execution time and maintaining the active case
